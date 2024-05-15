@@ -7,7 +7,7 @@ from esm import FastaBatchedDataset, pretrained
 # code gratefully borrowed from
 # https://www.kaggle.com/code/viktorfairuschin/extracting-esm-2-embeddings-from-fasta-files
 
-SPLIT_ID = 0
+SPLIT_ID = "1"
 MODEL_NAME = "esm2_t30_150M_UR50D"
 FP_SEQUENCES = f"data/splits/split-{SPLIT_ID}.fasta"
 FP_OUT_EMBEDDINGS = f"data/embeddings/{MODEL_NAME}/split-{SPLIT_ID}/"

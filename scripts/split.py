@@ -1,18 +1,14 @@
+import json
 import pandas as pd
 
 from scripts.utils import read_in_fasta
 
-# Parameters
-SPLIT_ID = 0  # id to the json file which hold the parameters of the split - can maybe be just included in the snakemake file
-
-overlap = 90
-n_chunks = 0
-chunk_size = 180
-
-FP_GENE_TABLE = "data/genes.csv"
-FP_SEQ = "data/sequences.fasta"
+FP_SPLIT_PARAMS = "configs/split_ids.json"
+FP_SEQ = "data/sequences_nav_cav.fasta"
 FP_LABELS = "data/variants.csv"
 
+# Parameters
+SPLIT_ID = "2"
 FP_OUT_FASTA = f"data/splits/split-{SPLIT_ID}.fasta"
 
 
@@ -82,7 +78,14 @@ def split_seq_by_n_chunks():
 
 
 def main():
-    # df_genes = pd.read_csv(FP_GENE_TABLE)
+
+    # read in the parameters for the split
+    with open(FP_SPLIT_PARAMS, "r") as f:
+        split_params = json.load(f)
+
+    for key, value in split_params[SPLIT_ID].items():
+        globals()[key] = value
+
     dict_seq = read_in_fasta(FP_SEQ, index="gene")
 
     if SPLIT_ID == 0:

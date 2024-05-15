@@ -1,0 +1,12 @@
+{
+    "1": {
+        "overlap": 150,
+        "n_chunks": 0,
+        "chunk_size": 300
+    },
+    "2": {
+        "overlap": 100,
+        "n_chunks": 0,
+        "chunk_size": 200
+    }
+}
