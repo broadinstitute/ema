@@ -2,7 +2,6 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 from scipy.spatial.distance import pdist, squareform
-from scripts.SpaceP import EMBEDDING_HANDLER
 from ema.ema import EmbeddingHandler
 
 SPLIT_ID = 1
@@ -46,15 +45,26 @@ def main():
     fig = emb.visualise_emb_tsne(emb_space_name="chopped", colour="family")
 
     # visualise embedding distances
+    fig = emb.plot_emb_dist_dif_percentiles(
+        emb_space_name_1="full_length",
+        emb_space_name_2="chopped",
+        distance_metric="cityblock",
+        subset_group="family",
+        subset_group_value="Kir",
+    )
+
+    fig = emb.plot_emb_dist_hist(
+        emb_space_name_1="full_length",
+        emb_space_name_2="chopped",
+        distance_metric="euclidean",
+    )
+
     fig = emb.plot_emb_dist_heatmap(
         emb_space_name="full_length",
         group="family",
         distance_metric="cosine",
-    )
-    fig = emb.plot_emb_dist_heatmap(
-        emb_space_name="chopped",
-        group="family",
-        distance_metric="cosine",
+        order_x="gene",
+        order_y="gene",
     )
 
     fig = emb.plot_emb_dist_box(group="gene", distance_metric="cosine")
@@ -64,13 +74,6 @@ def main():
         emb_space_name_1="full_length",
         emb_space_name_2="chopped",
         distance_metric="cosine",
-    )
-
-    emb.plot_emb_dis_dif_box(
-        emb_space_name_1="full_length",
-        emb_space_name_2="chopped",
-        distance_metric="cosine",
-        group="family",
     )
 
     print()

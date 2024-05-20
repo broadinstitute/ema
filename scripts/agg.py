@@ -8,7 +8,7 @@ import pandas as pd
 AGG_ID = "1"
 
 SPLIT_ID = "0"
-MODEL_NAME = "esm2_t30_150M_UR50D"
+MODEL_NAME = "esm2_t33_650M_UR50D"  # "esm2_t30_150M_UR50D"
 
 FP_AGG_PARAMS = "configs/agg_ids.json"
 FP_GENE_TABLE = "data/genes.csv"
@@ -19,6 +19,7 @@ FP_OUT_AGG_EMB = f"data/aggregated-embeddings/{MODEL_NAME}/split-{SPLIT_ID}/agg-
 esm_representation_layer_per_model = {
     "esm2_t30_150M_UR50D": 30,
     "esm2_t33_650M_UR50D": 33,
+    "esm1v_t33_650M_UR90S_1": 33,
 }
 
 
