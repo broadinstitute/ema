@@ -62,7 +62,18 @@ class EmbeddingHandler:
                 continue
             colour_map[column] = dict()
             colours = px.colors.qualitative.Set2 + px.colors.qualitative.Set3
+
+            # Check if the colours list is empty
+            if not colours:
+                raise ValueError("The colours list is empty.")
+
             for i, value in enumerate(column_values):
+
+                # Check if the index i is within the range of the colours list
+                if i >= len(colours):
+                    raise IndexError(
+                        f"The index i is out of range for {column_values}"
+                    )
                 colour_map[column][value] = colours[i]
         return colour_map
 
