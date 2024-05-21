@@ -19,7 +19,7 @@ distance_metric_aliases = {
     "cityblock": "Manhattan",
     "cosine": "Cosine",
     "sequclidean_scaled": "Standardised Euclidean",
-    "euclidean_scaled": "Standardised Euclidean", # replace with "Normalised Euclidean"
+    "euclidean_scaled": "Standardised Euclidean",  # replace with "Normalised Euclidean"
     "cityblock_scaled": "Standardised Manhattan",
     "adjusted_cosine": "Adjusted Cosine",
     "knn": "K-Nearest Neighbours",
@@ -28,6 +28,12 @@ distance_metric_aliases = {
 
 class EmbeddingHandler:
     def __init__(self, sample_meta_data: pd.DataFrame):
+        """Initialise EmbeddingHandler object.
+
+        Parameters:
+        sample_meta_data (pd.DataFrame): Meta data for samples.
+            Should have sample names in the first column.
+        """
         self.meta_data = sample_meta_data
         self.sample_names = self.meta_data.iloc[:, 0].tolist()
         self.colour_map = self.__get_colour_map_for_features__()
@@ -37,6 +43,11 @@ class EmbeddingHandler:
         return
 
     def __get_colour_map_for_features__(self) -> dict:
+        """Generate colour map for features in meta_data.
+
+        Returns:
+        dict: Colour map for features in meta_data.
+        """
         if len(self.meta_data.columns) == 1:
             print("No meta data provided. Cannot generate colour map.")
             return None
@@ -55,16 +66,40 @@ class EmbeddingHandler:
         return colour_map
 
     def __check_for_emb_space__(self, emb_space_name: str) -> None:
+        """Check if emb_space_name is present in emb.
+
+        Parameters:
+        emb_space_name (str): Name of the embedding space.
+
+        Raises:
+        ValueError: If emb_space_name is not present in emb.
+        """
         if emb_space_name not in self.emb.keys():
             raise ValueError  # Add error message
         else:
             return True
 
     def __check_col_in_meta_data__(self, col) -> None:
+        """Check if col is present in meta_data.
+
+        Parameters:
+        col (str): Column name.
+
+        Raises:
+        ValueError: If col is not present in meta_data.
+        """
         if col not in self.meta_data.columns:
             raise ValueError(f"Column {col} not found in meta data.")
 
-    def __sample_indices_to_groups__(self, group: str):
+    def __sample_indices_to_groups__(self, group: str) -> dict:
+        """Convert sample indices to groups based on a column in meta_data.
+
+        Parameters:
+        group (str): Column name in meta_data.
+
+        Returns:
+        dict: Dictionary with group names as keys and sample indices as values.
+        """
         self.__check_col_in_meta_data__(group)
         group_indices = dict()
         for group_name in self.meta_data[group].unique():
@@ -106,7 +141,8 @@ class EmbeddingHandler:
         km = KMeans(n_clusters=n_clusters)
         km.fit(self.emb[emb_space_name]["emb"])
         km.predict(self.emb[emb_space_name]["emb"])
-        # add as strings to meta_data
+
+        # add cluster labels to meta_data
         self.meta_data["cluster_" + emb_space_name] = km.labels_.astype(str)
         self.colour_map = self.__get_colour_map_for_features__()
         print(f"{n_clusters} clusters calculated for {emb_space_name}.")
@@ -127,10 +163,24 @@ class EmbeddingHandler:
         return emb_pwd_masked
 
     def add_emb_space(self, embeddings: np.array, emb_space_name: str) -> None:
+        """Add embedding space to emb.
+
+        Parameters:
+        embeddings (np.array): Embedding space. Embeddings need to be
+        in the shape (n_samples, n_features). The order of samples should
+        match the order of samples in the meta_data.
+        emb_space_name (str): Name of the embedding space. Can be any string.
+        """
         if emb_space_name in self.emb.keys():
-            raise ValueError  # Add error message
+            raise ValueError(
+                f"Embedding space {emb_space_name} already exists."
+            )
         if embeddings.shape[0] != len(self.sample_names):
-            raise ValueError  # Add error message
+            raise ValueError(
+                f"Number of samples in embeddings ({embeddings.shape[0]}) \
+                    does not match the number of samples in meta_data \
+                    ({len(self.sample_names)})"
+            )
         self.emb[emb_space_name] = dict()
         self.emb[emb_space_name]["emb"] = embeddings
         self.__calculate_clusters__(emb_space_name, n_clusters=None)
@@ -146,17 +196,47 @@ class EmbeddingHandler:
         return
 
     def remove_emb_space(self, emb_space_name: str) -> None:
+        """Remove embedding space from emb.
+        
+        Parameters:
+        emb_space_name (str): Name of the embedding space to be removed.
+        """
         self.__check_for_emb_space__(emb_space_name)
         del self.emb[emb_space_name]
         return
 
-    def get_emb(self, emb_space_name: str):
+    def get_emb(self, emb_space_name: str) -> np.array:
+        """Return embedding space.
+        
+        Parameters:
+        emb_space_name (str): Name of the embedding space.
+        
+        Returns:
+        np.array: Embedding space.
+        """
         self.__check_for_emb_space__(emb_space_name)
         return self.emb[emb_space_name]["emb"]
 
     def get_sample_distance(
         self, emb_space_name: str, metric: str
     ) -> np.array:
+        """Calculate pairwise distance between samples in the embedding space.
+        
+        Parameters:
+        emb_space_name (str): Name of the embedding space.
+        metric (str): Distance metric. Can be one of the following:
+            - "euclidean"
+            - "cityblock"
+            - "cosine"
+            - "sequclidean_scaled"
+            - "euclidean_scaled"
+            - "cityblock_scaled"
+            - "adjusted_cosine"
+            - "knn"
+
+        Returns:
+        np.array: Pairwise distance matrix.
+        """
         self.__check_for_emb_space__(emb_space_name)
         # TODO check metric is valid
         if "distance" not in self.emb[emb_space_name].keys():
