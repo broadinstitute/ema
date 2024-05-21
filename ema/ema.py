@@ -61,12 +61,9 @@ class EmbeddingHandler:
                 )
                 continue
             colour_map[column] = dict()
+            colours = px.colors.qualitative.Set2 + px.colors.qualitative.Set3
             for i, value in enumerate(column_values):
-                if i >= len(px.colors.qualitative.Set2):
-                    colour_map[column][value] = px.colors.qualitative.Set2[
-                        i % len(px.colors.qualitative.Set2)
-                    ]
-                colour_map[column][value] = px.colors.qualitative.Set2[i]
+                colour_map[column][value] = colours[i]
         return colour_map
 
     def __check_for_emb_space__(self, emb_space_name: str) -> None:
@@ -201,7 +198,7 @@ class EmbeddingHandler:
 
     def remove_emb_space(self, emb_space_name: str) -> None:
         """Remove embedding space from emb.
-        
+
         Parameters:
         emb_space_name (str): Name of the embedding space to be removed.
         """
@@ -211,10 +208,10 @@ class EmbeddingHandler:
 
     def get_emb(self, emb_space_name: str) -> np.array:
         """Return embedding space.
-        
+
         Parameters:
         emb_space_name (str): Name of the embedding space.
-        
+
         Returns:
         np.array: Embedding space.
         """
@@ -225,7 +222,7 @@ class EmbeddingHandler:
         self, emb_space_name: str, metric: str
     ) -> np.array:
         """Calculate pairwise distance between samples in the embedding space.
-        
+
         Parameters:
         emb_space_name (str): Name of the embedding space.
         metric (str): Distance metric. Can be one of the following:
