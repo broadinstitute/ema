@@ -62,6 +62,10 @@ class EmbeddingHandler:
                 continue
             colour_map[column] = dict()
             for i, value in enumerate(column_values):
+                if i >= len(px.colors.qualitative.Set2):
+                    colour_map[column][value] = px.colors.qualitative.Set2[
+                        i % len(px.colors.qualitative.Set2)
+                    ]
                 colour_map[column][value] = px.colors.qualitative.Set2[i]
         return colour_map
 
