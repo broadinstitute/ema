@@ -34,7 +34,7 @@ class EmbeddingHandler:
         sample_meta_data (pd.DataFrame): Meta data for samples.
             Should have sample names in the first column.
         """
-        self.meta_data = sample_meta_data
+        self.meta_data = sample_meta_data.astype(str)
         self.sample_names = self.meta_data.iloc[:, 0].tolist()
         self.colour_map = self.__get_colour_map_for_features__()
         self.emb = dict()
@@ -396,8 +396,7 @@ class EmbeddingHandler:
             self.meta_data,
             x=feature,
             color="cluster_" + emb_space_name,
-            title=f"Agreement between unsupervised clusters and {feature} \
-                clusters for {emb_space_name} embeddings",
+            title=f"Agreement between unsupervised clusters and {feature} clusters for {emb_space_name} embeddings",
             labels={
                 "cluster_" + emb_space_name: "Unsupervised cluster",
                 feature: feature.capitalize(),
@@ -405,6 +404,8 @@ class EmbeddingHandler:
             },
             color_discrete_map=self.colour_map["cluster_" + emb_space_name],
         )
+        # order x-axis categories by category name
+        fig.update_xaxes(categoryorder="category ascending")
         fig = update_fig_layout(fig)
         return fig
 
@@ -1083,7 +1084,7 @@ def get_scatter_plot(
 
     # make dots proportional to number of samples
     fig.update_traces(
-        marker=dict(size=max(4, (1 / len(emb_object.sample_names)) * 400))
+        marker=dict(size=max(16, (1 / len(emb_object.sample_names)) * 400))
     )
     fig = update_fig_layout(fig)
     return fig
