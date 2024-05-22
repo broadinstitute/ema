@@ -31,8 +31,8 @@ def main():
     fig = emb.plot_emb_box(group="sample")
     fig = emb.plot_emb_box(group="gene")
 
-    fig = emb.visualise_emb_tsne(emb_space_name="full_length", colour="family")
-    fig = emb.visualise_emb_tsne(emb_space_name="chopped", colour="family")
+    fig = emb.visualise_emb_tsne(emb_space_name="ESM1v", colour="family")
+    fig = emb.visualise_emb_tsne(emb_space_name="ESM2", colour="family")
 
     # visualise embedding distances
     fig = emb.plot_emb_dist_dif_percentiles(

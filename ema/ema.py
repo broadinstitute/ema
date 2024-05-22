@@ -698,12 +698,6 @@ class EmbeddingHandler:
             range=[0, max(emb_pwd_1.max(), emb_pwd_2.max())],
             title=f"{emb_space_name_2} {distance_metric_aliases[distance_metric]} distance",
         )
-        # format to square aspect ratio
-        fig.update_layout(
-            width=500,
-            height=500,
-            autosize=False,
-        )
         fig = update_fig_layout(fig)
         return fig
 
@@ -1099,6 +1093,13 @@ def get_scatter_plot(
         },
         opacity=0.5,
         color_discrete_map=emb_object.colour_map[colour],
+    )
+
+    # make square aspect ratio
+    fig.update_layout(
+        width=800,
+        height=800,
+        autosize=False,
     )
 
     # make dots proportional to number of samples
