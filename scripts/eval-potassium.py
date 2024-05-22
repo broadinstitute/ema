@@ -16,10 +16,17 @@ def main():
     df_meta_data = pd.read_csv(FP_META_DATA)
 
     emb = EmbeddingHandler(sample_meta_data=df_meta_data)
+
     emb.add_emb_space(embeddings=emb_esm1v, emb_space_name="ESM1v")
     emb.add_emb_space(embeddings=emb_esm2, emb_space_name="ESM2")
 
-    # visualise embedding values
+    fig = emb.visualise_emb_pca("ESM1v")
+
+    # An unsupervised clustering can be performed using the KMeans algorithm
+    # The number of clusters can be determined by the user
+    # The overlap between the clusters and the groups defined in the meta data can be visualised
+    # in this bar plot
+
     fig = emb.plot_emb_hist()
     fig = emb.plot_emb_box(group="sample")
     fig = emb.plot_emb_box(group="gene")

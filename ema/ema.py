@@ -18,9 +18,9 @@ distance_metric_aliases = {
     "euclidean": "Euclidean",
     "cityblock": "Manhattan",
     "cosine": "Cosine",
-    "sequclidean_scaled": "Standardised Euclidean",
-    "euclidean_scaled": "Standardised Euclidean",  # replace with "Normalised Euclidean"
-    "cityblock_scaled": "Standardised Manhattan",
+    "sequclidean": "Standardised Euclidean",
+    "euclidean_normalised": "Normalised Euclidean",  # replace with "Normalised Euclidean"
+    "cityblock_normalised": "Normalised Manhattan",
     "adjusted_cosine": "Adjusted Cosine",
     "knn": "K-Nearest Neighbours",
 }
@@ -240,9 +240,9 @@ class EmbeddingHandler:
             - "euclidean"
             - "cityblock"
             - "cosine"
-            - "sequclidean_scaled"
-            - "euclidean_scaled"
-            - "cityblock_scaled"
+            - "sequclidean"
+            - "euclidean_normalised"
+            - "cityblock_normalised"
             - "adjusted_cosine"
             - "knn"
 
@@ -256,23 +256,26 @@ class EmbeddingHandler:
         if metric in self.emb[emb_space_name]["distance"].keys():
             return self.emb[emb_space_name]["distance"][metric]
 
-        if metric == "sequclidean_scaled":
-            emb_pwd = squareform(
-                pdist(self.emb[emb_space_name]["emb"], metric="seuclidean")
-            )
-            emb_pwd = emb_pwd / len(self.emb[emb_space_name]["emb"][1])
+        if metric == "sequclidean_normalised":
+            # divide each row by its norm
+            emb = self.emb[emb_space_name]["emb"]
+            emb_norm = np.linalg.norm(emb, axis=1)
+
+            emb_pwd = squareform(pdist(emb_norm, metric="seuclidean"))
             self.emb[emb_space_name]["distance"][metric] = emb_pwd
             return emb_pwd
 
-        elif metric == "euclidean_scaled":
-            emb_pwd = squareform(
-                pdist(self.emb[emb_space_name]["emb"], metric="euclidean")
-            )
-            emb_pwd = emb_pwd / len(self.emb[emb_space_name]["emb"][1])
+        elif metric == "euclidean_normalised":
+
+            # divide each row of the emb by its norm
+            emb = self.emb[emb_space_name]["emb"]
+            emb_norm = np.linalg.norm(emb, axis=1)
+            emb = emb / emb_norm[:, None]  # divide each row by its norm
+            emb_pwd = squareform(pdist(emb, metric="euclidean"))
             self.emb[emb_space_name]["distance"][metric] = emb_pwd
             return emb_pwd
 
-        elif metric == "cityblock_scaled":
+        elif metric == "cityblock_normalised":
             emb_pwd = squareform(
                 pdist(self.emb[emb_space_name]["emb"], metric="cityblock")
             )
@@ -335,8 +338,12 @@ class EmbeddingHandler:
 
         return delta_emb_pwd
 
-    def visualise_emb_pca(self, emb_space_name: str, colour: str):
+    def visualise_emb_pca(self, emb_space_name: str, colour: str = None):
         self.__check_for_emb_space__(emb_space_name)
+        if not colour:
+            self.__calculate_clusters__(emb_space_name, n_clusters=None)
+            colour = "cluster_" + emb_space_name
+
         self.__check_col_in_meta_data__(colour)
 
         pca = PCA(n_components=2)
@@ -351,9 +358,12 @@ class EmbeddingHandler:
         )
         return fig
 
-    def visualise_emb_umap(self, emb_space_name: str, colour: str):
-        self.__check_col_in_meta_data__(colour)
+    def visualise_emb_umap(self, emb_space_name: str, colour: str = None):
         self.__check_for_emb_space__(emb_space_name)
+        if not colour:
+            self.__calculate_clusters__(emb_space_name, n_clusters=None)
+            colour = "cluster_" + emb_space_name
+        self.__check_col_in_meta_data__(colour)
 
         umap_data = umap.UMAP(n_components=2, random_state=8)
         X_2d = umap_data.fit_transform(self.emb[emb_space_name]["emb"])
@@ -368,9 +378,12 @@ class EmbeddingHandler:
         return fig
 
     def visualise_emb_tsne(
-        self, emb_space_name: str, colour: str, perplexity=10
+        self, emb_space_name: str, colour: str = None, perplexity=10
     ):
         self.__check_for_emb_space__(emb_space_name)
+        if not colour:
+            self.__calculate_clusters__(emb_space_name, n_clusters=None)
+            colour = "cluster_" + emb_space_name
         self.__check_col_in_meta_data__(colour)
 
         tsne = TSNE(n_components=2, random_state=8, perplexity=perplexity)
@@ -684,6 +697,12 @@ class EmbeddingHandler:
         fig.update_yaxes(
             range=[0, max(emb_pwd_1.max(), emb_pwd_2.max())],
             title=f"{emb_space_name_2} {distance_metric_aliases[distance_metric]} distance",
+        )
+        # format to square aspect ratio
+        fig.update_layout(
+            width=500,
+            height=500,
+            autosize=False,
         )
         fig = update_fig_layout(fig)
         return fig
@@ -1084,7 +1103,7 @@ def get_scatter_plot(
 
     # make dots proportional to number of samples
     fig.update_traces(
-        marker=dict(size=max(16, (1 / len(emb_object.sample_names)) * 400))
+        marker=dict(size=max(10, (1 / len(emb_object.sample_names)) * 400))
     )
     fig = update_fig_layout(fig)
     return fig
