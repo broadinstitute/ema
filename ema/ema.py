@@ -369,13 +369,13 @@ class EmbeddingHandler:
                 continue
             # y to be 2 if even percentile, 1 if odd percentile
             if percentile / 10 % 2 == 0:
-                y_value = 2
+                y_value = 1.5
             else:
                 y_value = 1
-            # get row for percentile
-            row = df[df["percentile"] == percentile].iloc[0]
+            # get first row of the percentile
+            x_value = df[df["percentile"] == percentile]["values"].min()
             fig.add_annotation(
-                x=row["values"],
+                x=x_value,
                 y=y_value,
                 text=f"{percentile}th",
                 showarrow=False,
@@ -578,6 +578,7 @@ class EmbeddingHandler:
                 x=1,
             ),
         )
+        fig.update_xaxes(categoryorder="category ascending")
         fig = update_fig_layout(fig)
         return fig
 
@@ -715,31 +716,91 @@ class EmbeddingHandler:
                 x=1,
             ),
         )
+        fig.update_xaxes(categoryorder="category ascending")
         fig = update_fig_layout(fig)
         return fig
 
     def plot_emb_dist_scatter(
-        self, emb_space_name_1, emb_space_name_2, distance_metric
+        self,
+        emb_space_name_1: str,
+        emb_space_name_2: str,
+        distance_metric: str,
+        colour_group: str = None,
+        colour_value: str = None,
+        rank: bool = False,
     ):
         self.__check_for_emb_space__(emb_space_name_1)
         self.__check_for_emb_space__(emb_space_name_2)
 
-        emb_pwd_1 = squareform(
-            self.get_sample_distance(emb_space_name_1, distance_metric)
+        if colour_group is not None:
+            self.__check_col_in_meta_data__(colour_group)
+            # check if subset_group_value is in the meta_data
+            if colour_value is not None:
+                if colour_value not in self.meta_data[colour_group].unique():
+                    raise ValueError(
+                        f"{colour_value} not found in {colour_group}"
+                    )
+            else:
+                raise ValueError(
+                    "Please provide a colour_value or set colour_group=None"
+                )
+
+        emb_pwd_1 = self.get_sample_distance(
+            emb_space_name_1, distance_metric, rank
         )
-        emb_pwd_2 = squareform(
-            self.get_sample_distance(emb_space_name_2, distance_metric)
+        emb_pwd_2 = self.get_sample_distance(
+            emb_space_name_2, distance_metric, rank
         )
 
+        if colour_group is not None:
+            group_indices = self.meta_data[
+                self.meta_data[colour_group] == colour_value
+            ].index.tolist()
+            non_group_indices = list(
+                set(set(range(0, len(self.sample_names))) - set(group_indices))
+            )
+
+            colour = []
+
+            for i in range(len(self.sample_names)):
+                for j in range(i + 1, len(self.sample_names)):
+                    if i in group_indices and j in group_indices:
+                        colour.append("group")
+                    elif i in non_group_indices and j in non_group_indices:
+                        colour.append("non_group")
+                    else:
+                        colour.append("mixed")
+
+                colour_map = {
+                    "group": self.colour_map[colour_group][colour_value],
+                    "non_group": "lightgray",
+                    "mixed": "lightsteelblue",
+                }
+        else:
+            colour = None
+            colour_map = None
+
+        sample_names = []
+        # add sample names
+        for i in range(len(self.sample_names)):
+            for j in range(i + 1, len(self.sample_names)):
+                sample_names.append(
+                    f"{self.sample_names[i]} - {self.sample_names[j]}"
+                )
+
         fig = px.scatter(
-            x=emb_pwd_1.flatten(),
-            y=emb_pwd_2.flatten(),
+            x=convert_to_1d_array(emb_pwd_1),
+            y=convert_to_1d_array(emb_pwd_2),
             labels={
                 "x": f"{emb_space_name_1} {distance_metric_aliases[distance_metric]} distance",
                 "y": f"{emb_space_name_2} {distance_metric_aliases[distance_metric]} distance",
             },
             title=f"Scatter plot of {distance_metric_aliases[distance_metric]} distance values between {emb_space_name_1} and {emb_space_name_2}",
-            opacity=0.5,
+            opacity=0.4,
+            color=colour,
+            color_discrete_map=colour_map,
+            hover_data={"Sample pair": sample_names},
+            hover_name=sample_names,
         )
         # add line at 45 degrees dashed
         fig.add_shape(
@@ -748,18 +809,20 @@ class EmbeddingHandler:
             y0=0,
             x1=max(emb_pwd_1.max(), emb_pwd_2.max()),
             y1=max(emb_pwd_1.max(), emb_pwd_2.max()),
-            line=dict(color="lightgray", width=2, dash="dash"),
+            line=dict(color="black", width=2, dash="dash"),
         )
         # adjust x and y axis to be the same scale
         fig.update_xaxes(
-            range=[0, max(emb_pwd_1.max(), emb_pwd_2.max())],
+            range=[0, max(emb_pwd_1.max() * 1.1, emb_pwd_2.max() * 1.1)],
             title=f"{emb_space_name_1} {distance_metric_aliases[distance_metric]} distance",
         )
         fig.update_yaxes(
-            range=[0, max(emb_pwd_1.max(), emb_pwd_2.max())],
+            range=[0, max(emb_pwd_1.max() * 1.1, emb_pwd_2.max() * 1.1)],
             title=f"{emb_space_name_2} {distance_metric_aliases[distance_metric]} distance",
         )
+        fig.update_layout(width=800, height=800)
         fig = update_fig_layout(fig)
+
         return fig
 
     def plot_emb_dist_hist(self, distance_metric):
@@ -926,6 +989,7 @@ class EmbeddingHandler:
                 x=1,
             ),
         )
+        fig.update_xaxes(categoryorder="category ascending")
         fig = update_fig_layout(fig)
         return fig
 
@@ -952,6 +1016,7 @@ class EmbeddingHandler:
         # if subset is provided, only use the subset
         if subset_group is not None:
             self.__check_col_in_meta_data__(subset_group)
+            # check if subset_group_value is in the meta_data
             if subset_group_value is not None:
                 if (
                     subset_group_value
@@ -960,6 +1025,8 @@ class EmbeddingHandler:
                     raise ValueError(
                         f"{subset_group_value} not found in {subset_group}"
                     )
+
+            # get indices of the subset
             subset_indices = self.meta_data[
                 self.meta_data[subset_group] == subset_group_value
             ].index.tolist()
@@ -1030,6 +1097,14 @@ class EmbeddingHandler:
                     )  # Offset target indices for better separation
                     value.append(count_matrix[i, j])
 
+        df_links = pd.DataFrame(
+            {"source": source, "target": target, "value": value}
+        )
+        df_links.sort_values(["source", "target"], inplace=True)
+        source = df_links["source"].tolist()
+        target = df_links["target"].tolist()
+        value = df_links["value"].tolist()
+
         # define node labelss
         labels = [
             f"{percentile} {emb_space_name_1}" for percentile in percentiles
@@ -1062,8 +1137,15 @@ class EmbeddingHandler:
                         value=value,
                         color=["lightsteelblue" for _ in value],
                     ),
+                    textfont=dict(color="black", family="Arial", size=12),
                 )
             ]
+        )
+        # set dimensions
+        fig.update_layout(
+            width=800,
+            height=800,
+            autosize=False,
         )
         fig = update_fig_layout(fig)
 
@@ -1134,17 +1216,24 @@ def global_percentiles(arr):
     if len(arr) < 11:
         raise ValueError("Array must have at least 11 entries.")
     flattened = squareform(arr)
-    sorted_indices = np.argsort(flattened)
-    ranks = np.argsort(sorted_indices)
-    percentiles = (ranks / (len(flattened) - 1)) * 100
+    sorted_indices = np.argsort(
+        flattened
+    )  # returns the indices that would sort the array
+    ranks = np.argsort(sorted_indices)  # get the ranks of the sorted indices
+    percentiles = (ranks / (len(flattened) - 1)) * 100  # calculate percentiles
     percentiles_rounded_up = np.ceil(percentiles / 10) * 10
+    percentiles_rounded_up[percentiles_rounded_up == 0] = (
+        10  # replace 0 with 10
+    )
     percentile_array = squareform(percentiles_rounded_up)
     return percentile_array
 
 
 def global_percentiles_bins(arr):
     if len(arr) < 11:
-        raise ValueError("Array must have at least 11 entries.")
+        raise ValueError(
+            "Array must have at least 11 entries in order to compute ranks."
+        )
     flattened = squareform(arr)
     sorted_indices = np.argsort(flattened)
     ranks = np.argsort(sorted_indices)
