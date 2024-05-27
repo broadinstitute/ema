@@ -229,40 +229,13 @@ class EmbeddingHandler:
         self.__check_for_emb_space__(emb_space_name)
         return self.emb[emb_space_name]["emb"]
 
-    def get_sample_distance(
-        self, emb_space_name: str, metric: str
-    ) -> np.array:
-        """Calculate pairwise distance between samples in the embedding space.
-
-        Parameters:
-        emb_space_name (str): Name of the embedding space.
-        metric (str): Distance metric. Can be one of the following:
-            - "euclidean"
-            - "cityblock"
-            - "cosine"
-            - "sequclidean"
-            - "euclidean_normalised"
-            - "cityblock_normalised"
-            - "adjusted_cosine"
-            - "knn"
-
-        Returns:
-        np.array: Pairwise distance matrix.
-        """
-        self.__check_for_emb_space__(emb_space_name)
-        # TODO check metric is valid
-        if "distance" not in self.emb[emb_space_name].keys():
-            self.emb[emb_space_name]["distance"] = dict()
-        if metric in self.emb[emb_space_name]["distance"].keys():
-            return self.emb[emb_space_name]["distance"][metric]
+    def __calculate_pwd__(self, emb_space_name: str, metric: str):
 
         if metric == "sequclidean_normalised":
             # divide each row by its norm
             emb = self.emb[emb_space_name]["emb"]
             emb_norm = np.linalg.norm(emb, axis=1)
-
             emb_pwd = squareform(pdist(emb_norm, metric="seuclidean"))
-            self.emb[emb_space_name]["distance"][metric] = emb_pwd
             return emb_pwd
 
         elif metric == "euclidean_normalised":
@@ -272,7 +245,6 @@ class EmbeddingHandler:
             emb_norm = np.linalg.norm(emb, axis=1)
             emb = emb / emb_norm[:, None]  # divide each row by its norm
             emb_pwd = squareform(pdist(emb, metric="euclidean"))
-            self.emb[emb_space_name]["distance"][metric] = emb_pwd
             return emb_pwd
 
         elif metric == "cityblock_normalised":
@@ -280,7 +252,6 @@ class EmbeddingHandler:
                 pdist(self.emb[emb_space_name]["emb"], metric="cityblock")
             )
             emb_pwd = emb_pwd / len(self.emb[emb_space_name]["emb"][1])
-            self.emb[emb_space_name]["distance"][metric] = emb_pwd
             return emb_pwd
 
         elif metric == "adjusted_cosine":
@@ -288,7 +259,6 @@ class EmbeddingHandler:
             emb = self.emb[emb_space_name]["emb"]
             emb = emb - emb.mean(axis=0)
             emb_pwd = squareform(pdist(emb, metric="cosine"))
-            self.emb[emb_space_name]["distance"][metric] = emb_pwd
             return emb_pwd
 
         elif metric == "knn":
@@ -308,35 +278,120 @@ class EmbeddingHandler:
         emb_pwd = squareform(
             pdist(self.emb[emb_space_name]["emb"], metric=metric)
         )
-        self.emb[emb_space_name]["distance"][metric] = emb_pwd
         return emb_pwd
+
+    def get_distance_percentiles(self, emb_space_name, distance_metric):
+        self.__check_for_emb_space__(emb_space_name)
+        emb_pwd = self.get_sample_distance(emb_space_name, distance_metric)
+        percentiles = global_percentiles(emb_pwd)
+        return percentiles
+
+    def get_sample_distance(
+        self, emb_space_name: str, metric: str, rank: bool = False
+    ) -> np.array:
+        """Calculate pairwise distance between samples in the embedding space.
+
+        Parameters:
+        emb_space_name (str): Name of the embedding space.
+        metric (str): Distance metric. Can be one of the following:
+            - "euclidean"
+            - "cityblock"
+            - "cosine"
+            - "sequclidean"
+            - "euclidean_normalised"
+            - "cityblock_normalised"
+            - "adjusted_cosine"
+            - "knn"
+
+        Returns:
+        np.array: Pairwise distance matrix.
+        """
+        self.__check_for_emb_space__(emb_space_name)
+        # check if distance matrix is already calculated
+
+        if "distance" not in self.emb[emb_space_name].keys():
+            self.emb[emb_space_name]["distance"] = dict()
+        if metric in self.emb[emb_space_name]["distance"].keys():
+            pwd = self.emb[emb_space_name]["distance"][metric]
+        else:
+            pwd = self.__calculate_pwd__(emb_space_name, metric)
+            self.emb[emb_space_name]["distance"][metric] = pwd
+        if rank:
+            pwd = self.get_distance_percentiles(emb_space_name, metric)
+        return pwd
 
     def get_sample_distance_difference(
         self,
         emb_space_name_1: str,
         emb_space_name_2: str,
         distance_metric: str,
+        rank: bool = False,
     ):
         for emb_space_name in [emb_space_name_1, emb_space_name_2]:
             self.__check_for_emb_space__(emb_space_name)
 
-        for emb_space_name in [emb_space_name_1, emb_space_name_2]:
-            if "distance" not in self.emb[emb_space_name].keys():
-                self.emb[emb_space_name]["distance"] = dict()
-            if (
-                distance_metric
-                not in self.emb[emb_space_name]["distance"].keys()
-            ):
-                self.emb[emb_space_name]["distance"][distance_metric] = (
-                    self.get_sample_distance(emb_space_name, distance_metric)
-                )
-
-        delta_emb_pwd = (
-            self.emb[emb_space_name_1]["distance"][distance_metric]
-            - self.emb[emb_space_name_2]["distance"][distance_metric]
+        pwd_1 = self.get_sample_distance(
+            emb_space_name_1, distance_metric, rank
+        )
+        pwd_2 = self.get_sample_distance(
+            emb_space_name_2, distance_metric, rank
         )
 
+        delta_emb_pwd = pwd_1 - pwd_2
+
         return delta_emb_pwd
+
+    def plot_distances_per_rank(
+        self, emb_space_name: str, distance_metric: str
+    ):
+        self.__check_for_emb_space__(emb_space_name)
+        emb_pwd = self.get_sample_distance(
+            emb_space_name=emb_space_name,
+            metric=distance_metric,
+        )
+        df = global_percentiles_bins(emb_pwd)
+        fig = px.line(
+            df,
+            x="values",
+            y=[0] * len(df),
+            color="percentile",
+            line_shape="hv",
+            title="",
+            labels={
+                "values": f"{distance_metric_aliases[distance_metric]} distance in {emb_space_name}",
+            },
+            # alternate between light and dark grey
+            color_discrete_sequence=["lightgrey", "darkgrey"] * 50,
+        )
+        # add percentile as text
+        for percentile in df["percentile"].unique():
+            if percentile == 0:
+                continue
+            # y to be 2 if even percentile, 1 if odd percentile
+            if percentile / 10 % 2 == 0:
+                y_value = 2
+            else:
+                y_value = 1
+            # get row for percentile
+            row = df[df["percentile"] == percentile].iloc[0]
+            fig.add_annotation(
+                x=row["values"],
+                y=y_value,
+                text=f"{percentile}th",
+                showarrow=False,
+            )
+        fig.update_traces(line=dict(width=20))
+        fig = update_fig_layout(fig)
+        fig.update_layout(
+            yaxis=dict(visible=False),  # remove y axis
+            showlegend=False,  # remove legend
+        )
+        # adjust size to be very narrow
+        fig.update_layout(
+            width=1000,
+            height=200,
+        )
+        return fig
 
     def visualise_emb_pca(self, emb_space_name: str, colour: str = None):
         self.__check_for_emb_space__(emb_space_name)
@@ -532,6 +587,7 @@ class EmbeddingHandler:
         distance_metric: str,
         order_x: str = None,
         order_y: str = None,
+        rank: bool = False,
     ):
         self.__check_for_emb_space__(emb_space_name)
         if order_x is not None:
@@ -539,12 +595,11 @@ class EmbeddingHandler:
         if order_y is not None:
             self.__check_col_in_meta_data__(order_y)
 
-        if "distance" not in self.emb[emb_space_name].keys():
-            self.emb[emb_space_name]["distance"] = dict()
-        if distance_metric not in self.emb[emb_space_name]["distance"].keys():
-            emb_pwd = self.get_sample_distance(emb_space_name, distance_metric)
-        else:
-            emb_pwd = self.emb[emb_space_name]["distance"][distance_metric]
+        emb_pwd = self.get_sample_distance(
+            emb_space_name=emb_space_name,
+            metric=distance_metric,
+            rank=rank,
+        )
 
         # find indices of samples for each order_x and order_y
         if order_x is not None:
@@ -559,6 +614,7 @@ class EmbeddingHandler:
             emb_pwd = emb_pwd[order_x_indices, :]
         else:
             order_x_indices = list(range(len(self.sample_names)))
+
         if order_y is not None:
             # find all sample ids for each order_y from meta_data
             order_y_indices = [
@@ -572,6 +628,11 @@ class EmbeddingHandler:
         else:
             order_y_indices = list(range(len(self.sample_names)))
 
+        if rank:
+            title = f"Rank of {distance_metric_aliases[distance_metric]} distance matrix of {emb_space_name} embedding space"
+        else:
+            title = f"{distance_metric_aliases[distance_metric]} distance matrix of {emb_space_name} embedding space"
+
         fig = px.imshow(
             emb_pwd,
             labels=dict(
@@ -581,8 +642,8 @@ class EmbeddingHandler:
             ),
             x=[self.sample_names[i] for i in order_x_indices],
             y=[self.sample_names[i] for i in order_y_indices],
-            title=f"{distance_metric_aliases[distance_metric]} distance matrix of {emb_space_name} embedding space",
-            color_continuous_scale="Reds",
+            title=title,
+            color_continuous_scale="Blues",
         )
         fig = update_fig_layout(fig)
         return fig
@@ -735,7 +796,11 @@ class EmbeddingHandler:
         return fig
 
     def plot_emb_dis_dif_heatmap(
-        self, emb_space_name_1, emb_space_name_2, distance_metric
+        self,
+        emb_space_name_1: str,
+        emb_space_name_2: str,
+        distance_metric: str,
+        rank: bool = False,
     ):
         for emb_space_name in [emb_space_name_1, emb_space_name_2]:
             self.__check_for_emb_space__(emb_space_name)
@@ -743,7 +808,12 @@ class EmbeddingHandler:
             emb_space_name_1=emb_space_name_1,
             emb_space_name_2=emb_space_name_2,
             distance_metric=distance_metric,
+            rank=rank,
         )
+        if rank:
+            title = f"Rank of {distance_metric_aliases[distance_metric]} distance difference matrix from {emb_space_name_1} to {emb_space_name_2} embedding space"
+        else:
+            title = f"{distance_metric_aliases[distance_metric]} distance difference matrix from {emb_space_name_1} to {emb_space_name_2} embedding space"
         fig = px.imshow(
             emb_pwd_diff,
             labels=dict(
@@ -753,8 +823,8 @@ class EmbeddingHandler:
             ),
             x=self.sample_names,
             y=self.sample_names,
-            title=f"{distance_metric_aliases[distance_metric]} Distance Matrix of {emb_space_name_1} and {emb_space_name_2} Embedding Space",
-            color_continuous_scale="Greys",
+            title=title,
+            color_continuous_scale="rdbu",
         )
         fig.update_layout(
             template="plotly_white",
@@ -858,12 +928,6 @@ class EmbeddingHandler:
         )
         fig = update_fig_layout(fig)
         return fig
-
-    def get_distance_percentiles(self, emb_space_name, distance_metric):
-        self.__check_for_emb_space__(emb_space_name)
-        emb_pwd = self.get_sample_distance(emb_space_name, distance_metric)
-        percentiles = global_percentiles(emb_pwd)
-        return percentiles
 
     def plot_emb_dist_dif_percentiles(
         self,
@@ -1066,6 +1130,9 @@ def global_percentiles(arr):
     Returns:
     numpy.ndarray: Array with the same shape where each value is replaced by its global percentile rank.
     """
+    # check that at least 11 entries in the array
+    if len(arr) < 11:
+        raise ValueError("Array must have at least 11 entries.")
     flattened = squareform(arr)
     sorted_indices = np.argsort(flattened)
     ranks = np.argsort(sorted_indices)
@@ -1073,6 +1140,28 @@ def global_percentiles(arr):
     percentiles_rounded_up = np.ceil(percentiles / 10) * 10
     percentile_array = squareform(percentiles_rounded_up)
     return percentile_array
+
+
+def global_percentiles_bins(arr):
+    if len(arr) < 11:
+        raise ValueError("Array must have at least 11 entries.")
+    flattened = squareform(arr)
+    sorted_indices = np.argsort(flattened)
+    ranks = np.argsort(sorted_indices)
+    percentiles = (ranks / (len(flattened) - 1)) * 100
+    percentiles_rounded_up = np.ceil(percentiles / 10) * 10
+    percentile_df = pd.DataFrame(columns=["percentile", "values"])
+    for i in range(0, 110, 10):
+        values = flattened[percentiles_rounded_up == i]
+        percentile_df = pd.concat(
+            [
+                percentile_df,
+                pd.DataFrame(
+                    {"percentile": [i] * len(values), "values": values}
+                ),
+            ]
+        )
+    return percentile_df
 
 
 def get_scatter_plot(
