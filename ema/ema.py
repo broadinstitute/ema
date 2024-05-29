@@ -255,7 +255,7 @@ class EmbeddingHandler:
 
     def __calculate_pwd__(self, emb_space_name: str, metric: str):
 
-        if metric == "sequclidean_normalised":
+        if metric == "sqeuclidean_normalised":
             # divide each row by its norm
             emb = self.emb[emb_space_name]["emb"]
             emb_norm = np.linalg.norm(emb, axis=1)
