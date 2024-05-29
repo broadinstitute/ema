@@ -19,6 +19,7 @@ distance_metric_aliases = {
     "cityblock": "Manhattan",
     "cosine": "Cosine",
     "sqeuclidean": "Standardised Euclidean",
+    "sequclidean_normalised": "Normalised Standardised Euclidean",
     "euclidean_normalised": "Normalised Euclidean",  # replace with "Normalised Euclidean"
     "cityblock_normalised": "Normalised Manhattan",
     "adjusted_cosine": "Adjusted Cosine",
@@ -248,9 +249,9 @@ class EmbeddingHandler:
             list: Unique values in the column ordered alphabetically.
         """
         self.__check_col_in_meta_data__(group)
-        group_values = self.meta_data[group].unique()
+        group_values = self.meta_data[group].unique().tolist()
         group_values = sorted(group_values)
-        return group_values.tolist()
+        return group_values
 
     def __calculate_pwd__(self, emb_space_name: str, metric: str):
 
@@ -280,7 +281,7 @@ class EmbeddingHandler:
         elif metric == "adjusted_cosine":
             # substract the mean of each column from each value
             emb = self.emb[emb_space_name]["emb"]
-            emb = emb - emb.mean(axis=0)
+            emb = emb - emb.median(axis=0)
             emb_pwd = squareform(pdist(emb, metric="cosine"))
             return emb_pwd
 
