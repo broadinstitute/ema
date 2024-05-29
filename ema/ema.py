@@ -260,7 +260,7 @@ class EmbeddingHandler:
             emb = self.emb[emb_space_name]["emb"]
             emb_norm = np.linalg.norm(emb, axis=1)
             emb = emb / emb_norm[:, None]  # divide each row by its norm
-            emb_pwd = squareform(pdist(emb_norm, metric="seuclidean"))
+            emb_pwd = squareform(pdist(emb, metric="seuclidean"))
             return emb_pwd
 
         elif metric == "euclidean_normalised":
