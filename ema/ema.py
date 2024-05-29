@@ -19,7 +19,7 @@ distance_metric_aliases = {
     "cityblock": "Manhattan",
     "cosine": "Cosine",
     "sqeuclidean": "Standardised Euclidean",
-    "sequclidean_normalised": "Normalised Standardised Euclidean",
+    "sqeuclidean_normalised": "Normalised Standardised Euclidean",
     "euclidean_normalised": "Normalised Euclidean",  # replace with "Normalised Euclidean"
     "cityblock_normalised": "Normalised Manhattan",
     "adjusted_cosine": "Adjusted Cosine",
