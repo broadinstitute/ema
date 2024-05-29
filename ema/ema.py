@@ -18,11 +18,12 @@ distance_metric_aliases = {
     "euclidean": "Euclidean",
     "cityblock": "Manhattan",
     "cosine": "Cosine",
-    "sequclidean": "Standardised Euclidean",
+    "sqeuclidean": "Standardised Euclidean",
     "euclidean_normalised": "Normalised Euclidean",  # replace with "Normalised Euclidean"
     "cityblock_normalised": "Normalised Manhattan",
     "adjusted_cosine": "Adjusted Cosine",
     "knn": "K-Nearest Neighbours",
+    "mahalanobis": "Mahalanobis",
 }
 
 
@@ -228,6 +229,28 @@ class EmbeddingHandler:
         """
         self.__check_for_emb_space__(emb_space_name)
         return self.emb[emb_space_name]["emb"]
+
+    def get_groups(self) -> list:
+        """Return list of columns in meta_data.
+
+        Returns:
+            list: List of columns in meta_data.
+        """
+        return self.meta_data.columns.tolist()
+
+    def get_value_per_group(self, group: str) -> list:
+        """Return unique values in a column of meta_data.
+
+        Args:
+            group (str): Column name in meta_data.
+
+        Returns:
+            list: Unique values in the column ordered alphabetically.
+        """
+        self.__check_col_in_meta_data__(group)
+        group_values = self.meta_data[group].unique()
+        group_values = sorted(group_values)
+        return group_values.tolist()
 
     def __calculate_pwd__(self, emb_space_name: str, metric: str):
 
@@ -644,7 +667,7 @@ class EmbeddingHandler:
             x=[self.sample_names[i] for i in order_x_indices],
             y=[self.sample_names[i] for i in order_y_indices],
             title=title,
-            color_continuous_scale="Blues",
+            color_continuous_scale="Reds",
         )
         fig = update_fig_layout(fig)
         return fig
@@ -726,7 +749,8 @@ class EmbeddingHandler:
         emb_space_name_2: str,
         distance_metric: str,
         colour_group: str = None,
-        colour_value: str = None,
+        colour_value_1: str = None,
+        colour_value_2: str = None,
         rank: bool = False,
     ):
         self.__check_for_emb_space__(emb_space_name_1)
@@ -735,11 +759,19 @@ class EmbeddingHandler:
         if colour_group is not None:
             self.__check_col_in_meta_data__(colour_group)
             # check if subset_group_value is in the meta_data
-            if colour_value is not None:
-                if colour_value not in self.meta_data[colour_group].unique():
+            if colour_value_1 is not None:
+                if colour_value_1 not in self.meta_data[colour_group].unique():
                     raise ValueError(
-                        f"{colour_value} not found in {colour_group}"
+                        f"{colour_value_1} not found in {colour_group}"
                     )
+                if colour_value_2 is not None:
+                    if (
+                        colour_value_2
+                        not in self.meta_data[colour_group].unique()
+                    ):
+                        raise ValueError(
+                            f"{colour_value_2} not found in {colour_group}"
+                        )
             else:
                 raise ValueError(
                     "Please provide a colour_value or set colour_group=None"
@@ -753,29 +785,65 @@ class EmbeddingHandler:
         )
 
         if colour_group is not None:
-            group_indices = self.meta_data[
-                self.meta_data[colour_group] == colour_value
-            ].index.tolist()
-            non_group_indices = list(
-                set(set(range(0, len(self.sample_names))) - set(group_indices))
-            )
+            if colour_value_2 is None:
+                group_indices = self.meta_data[
+                    self.meta_data[colour_group] == colour_value_1
+                ].index.tolist()
+                non_group_indices = list(
+                    set(
+                        set(range(0, len(self.sample_names)))
+                        - set(group_indices)
+                    )
+                )
 
-            colour = []
+                colour = []
 
-            for i in range(len(self.sample_names)):
-                for j in range(i + 1, len(self.sample_names)):
-                    if i in group_indices and j in group_indices:
-                        colour.append("group")
-                    elif i in non_group_indices and j in non_group_indices:
-                        colour.append("non_group")
-                    else:
-                        colour.append("mixed")
+                for i in range(len(self.sample_names)):
+                    for j in range(i + 1, len(self.sample_names)):
+                        if i in group_indices and j in group_indices:
+                            colour.append("group")
+                        elif i in non_group_indices and j in non_group_indices:
+                            colour.append("non_group")
+                        else:
+                            colour.append("mixed")
 
-                colour_map = {
-                    "group": self.colour_map[colour_group][colour_value],
-                    "non_group": "lightgray",
-                    "mixed": "lightsteelblue",
-                }
+                    colour_map = {
+                        "group": self.colour_map[colour_group][colour_value_1],
+                        "non_group": "lightgray",
+                        "mixed": "lightsteelblue",
+                    }
+            else:
+                group_indices_1 = self.meta_data[
+                    self.meta_data[colour_group] == colour_value_1
+                ].index.tolist()
+                group_indices_2 = self.meta_data[
+                    self.meta_data[colour_group] == colour_value_2
+                ].index.tolist()
+                colour = []
+
+                for i in range(len(self.sample_names)):
+                    for j in range(i + 1, len(self.sample_names)):
+                        if (i in group_indices_1 and j in group_indices_2) or (
+                             in group_indices_2 and j in group_indices_1
+                        ):
+                            colour.append("cross")
+                        elif (i in group_indices_1 and j in group_indices_1):
+                            colour.append(f"{colour_value_1}")
+                        elif (i in group_indices_2 and j in group_indices_2):
+                            colour.append(f"{colour_value_2}")
+                        else:
+                            colour.append("non_group")
+
+                    colour_map = {
+                        "cross": "steelblue",
+                        f"{colour_value_1}": self.colour_map[colour_group][
+                            colour_value_1
+                        ],
+                        f"{colour_value_2}": self.colour_map[colour_group][
+                            colour_value_2],
+                        "non_group": "lightgray",
+                    }
+
         else:
             colour = None
             colour_map = None
