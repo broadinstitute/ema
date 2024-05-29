@@ -19,6 +19,32 @@ def main():
 
     emb.add_emb_space(embeddings=emb_esm1v, emb_space_name="ESM1v")
     emb.add_emb_space(embeddings=emb_esm2, emb_space_name="ESM2")
+    fig = emb.plot_emb_dist_scatter(
+        emb_space_name_1="ESM1v",
+        emb_space_name_2="ESM2",
+        distance_metric="adjusted_cosine",
+        colour_group="family",
+        colour_value_1="Kir",
+        colour_value_2="Kv",
+    )
+
+    fig = emb.plot_emb_dist_dif_percentiles(
+        emb_space_name_1="ESM1v",
+        emb_space_name_2="ESM2",
+        distance_metric="adjusted_cosine",
+        subset_group="family",
+        subset_group_value="Kir",
+    )
+
+    fig = emb.plot_distances_per_rank(
+        emb_space_name="ESM1v", distance_metric="cosine"
+    )
+
+    fig = emb.plot_emb_dist_dif_percentiles(
+        emb_space_name_1="ESM1v",
+        emb_space_name_2="ESM2",
+        distance_metric="adjusted_cosine",
+    )
 
     fig = emb.visualise_emb_pca("ESM1v")
 
