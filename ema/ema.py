@@ -259,6 +259,7 @@ class EmbeddingHandler:
             # divide each row by its norm
             emb = self.emb[emb_space_name]["emb"]
             emb_norm = np.linalg.norm(emb, axis=1)
+            emb = emb / emb_norm[:, None]  # divide each row by its norm
             emb_pwd = squareform(pdist(emb_norm, metric="seuclidean"))
             return emb_pwd
 
@@ -281,7 +282,7 @@ class EmbeddingHandler:
         elif metric == "adjusted_cosine":
             # substract the mean of each column from each value
             emb = self.emb[emb_space_name]["emb"]
-            emb = emb - emb.median(axis=0)
+            emb = emb - np.median(emb, axis=0)  # emb.median(axis=0)
             emb_pwd = squareform(pdist(emb, metric="cosine"))
             return emb_pwd
 
