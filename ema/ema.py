@@ -824,12 +824,12 @@ class EmbeddingHandler:
                 for i in range(len(self.sample_names)):
                     for j in range(i + 1, len(self.sample_names)):
                         if (i in group_indices_1 and j in group_indices_2) or (
-                             in group_indices_2 and j in group_indices_1
+                            i in group_indices_2 and j in group_indices_1
                         ):
                             colour.append("cross")
-                        elif (i in group_indices_1 and j in group_indices_1):
+                        elif i in group_indices_1 and j in group_indices_1:
                             colour.append(f"{colour_value_1}")
-                        elif (i in group_indices_2 and j in group_indices_2):
+                        elif i in group_indices_2 and j in group_indices_2:
                             colour.append(f"{colour_value_2}")
                         else:
                             colour.append("non_group")
@@ -840,7 +840,8 @@ class EmbeddingHandler:
                             colour_value_1
                         ],
                         f"{colour_value_2}": self.colour_map[colour_group][
-                            colour_value_2],
+                            colour_value_2
+                        ],
                         "non_group": "lightgray",
                     }
 
