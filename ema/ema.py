@@ -5,13 +5,14 @@ import itertools
 import umap
 import math
 import plotly.graph_objects as go
+import scipy.stats as stats
 
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 from sklearn.cluster import KMeans
 from scipy.spatial.distance import pdist, squareform
 from statistics import mean
-
+from sklearn.mixture import GaussianMixture
 
 emb_space_colours = ["#56638A", "#BAD9B5", "#D77A61", "#D77A61", "#40531B"]
 distance_metric_aliases = {
@@ -161,6 +162,58 @@ class EmbeddingHandler:
         self.colour_map = self.__get_colour_map_for_features__()
         print(f"{n_clusters} clusters calculated for {emb_space_name}.")
         return
+    
+    def __calculate_pwd__(self, emb_space_name: str, metric: str):
+
+        if metric == "sqeuclidean_normalised":
+            # divide each row by its norm
+            emb = self.emb[emb_space_name]["emb"]
+            emb_norm = np.linalg.norm(emb, axis=1)
+            emb = emb / emb_norm[:, None]  # divide each row by its norm
+            emb_pwd = squareform(pdist(emb, metric="sqeuclidean"))
+            return emb_pwd
+
+        elif metric == "euclidean_normalised":
+
+            # divide each row of the emb by its norm
+            emb = self.emb[emb_space_name]["emb"]
+            emb_norm = np.linalg.norm(emb, axis=1)
+            emb = emb / emb_norm[:, None]  # divide each row by its norm
+            emb_pwd = squareform(pdist(emb, metric="euclidean"))
+            return emb_pwd
+
+        elif metric == "cityblock_normalised":
+            emb_pwd = squareform(
+                pdist(self.emb[emb_space_name]["emb"], metric="cityblock")
+            )
+            emb_pwd = emb_pwd / len(self.emb[emb_space_name]["emb"][1])
+            return emb_pwd
+
+        elif metric == "adjusted_cosine":
+            # substract the mean of each column from each value
+            emb = self.emb[emb_space_name]["emb"]
+            emb = emb - np.median(emb, axis=0)  # emb.median(axis=0)
+            emb_pwd = squareform(pdist(emb, metric="cosine"))
+            return emb_pwd
+
+        elif metric == "knn":
+            k_neighbours = math.floor(len(self.sample_names) / 5)
+            if k_neighbours < 1:
+                k_neighbours = 3
+            elif k_neighbours > 100:
+                k_neighbours = 100
+            print(
+                f"Calculating {k_neighbours} nearest neighbours for each sample."
+            )
+            emb_pwd = self.__calculate_k_closest_neighbours__(
+                emb_space_name=emb_space_name, k=k_neighbours
+            )
+            return emb_pwd
+
+        emb_pwd = squareform(
+            pdist(self.emb[emb_space_name]["emb"], metric=metric)
+        )
+        return emb_pwd
 
     def __calculate_k_closest_neighbours__(self, emb_space_name: str, k: int):
         self.__check_for_emb_space__(emb_space_name)
@@ -253,62 +306,27 @@ class EmbeddingHandler:
         group_values = sorted(group_values)
         return group_values
 
-    def __calculate_pwd__(self, emb_space_name: str, metric: str):
+    def get_distance_percentiles(
+        self, emb_space_name: str, distance_metric: str, rank: str
+    ) -> np.array:
+        """Return percentiles of pairwise distance matrix.
 
-        if metric == "sqeuclidean_normalised":
-            # divide each row by its norm
-            emb = self.emb[emb_space_name]["emb"]
-            emb_norm = np.linalg.norm(emb, axis=1)
-            emb = emb / emb_norm[:, None]  # divide each row by its norm
-            emb_pwd = squareform(pdist(emb, metric="sqeuclidean"))
-            return emb_pwd
+        Args:
+            emb_space_name (str): Name of the embedding space.
+            distance_metric (str): Name of the distance metric.
+            rank (str): Name of the rank method. Either "order", "normal_dis" or "poisson_dis".
 
-        elif metric == "euclidean_normalised":
-
-            # divide each row of the emb by its norm
-            emb = self.emb[emb_space_name]["emb"]
-            emb_norm = np.linalg.norm(emb, axis=1)
-            emb = emb / emb_norm[:, None]  # divide each row by its norm
-            emb_pwd = squareform(pdist(emb, metric="euclidean"))
-            return emb_pwd
-
-        elif metric == "cityblock_normalised":
-            emb_pwd = squareform(
-                pdist(self.emb[emb_space_name]["emb"], metric="cityblock")
-            )
-            emb_pwd = emb_pwd / len(self.emb[emb_space_name]["emb"][1])
-            return emb_pwd
-
-        elif metric == "adjusted_cosine":
-            # substract the mean of each column from each value
-            emb = self.emb[emb_space_name]["emb"]
-            emb = emb - np.median(emb, axis=0)  # emb.median(axis=0)
-            emb_pwd = squareform(pdist(emb, metric="cosine"))
-            return emb_pwd
-
-        elif metric == "knn":
-            k_neighbours = math.floor(len(self.sample_names) / 5)
-            if k_neighbours < 1:
-                k_neighbours = 3
-            elif k_neighbours > 100:
-                k_neighbours = 100
-            print(
-                f"Calculating {k_neighbours} nearest neighbours for each sample."
-            )
-            emb_pwd = self.__calculate_k_closest_neighbours__(
-                emb_space_name=emb_space_name, k=k_neighbours
-            )
-            return emb_pwd
-
-        emb_pwd = squareform(
-            pdist(self.emb[emb_space_name]["emb"], metric=metric)
-        )
-        return emb_pwd
-
-    def get_distance_percentiles(self, emb_space_name, distance_metric):
+        Returns:
+            np.array: Array with the percentiles of the pairwise distance matrix.
+        """
         self.__check_for_emb_space__(emb_space_name)
         emb_pwd = self.get_sample_distance(emb_space_name, distance_metric)
-        percentiles = global_percentiles(emb_pwd)
+        if rank == "order":
+            percentiles = global_rank(emb_pwd)
+        elif rank == "normal_dis":
+            percentiles = global_percentiles_normal_distribution(emb_pwd)
+        elif rank == "bimodal_dis":
+            percentiles = global_percentiles_gaussian_mixture(emb_pwd)
         return percentiles
 
     def get_sample_distance(
@@ -325,7 +343,9 @@ class EmbeddingHandler:
             - "sequclidean"
             - "euclidean_normalised"
             - "cityblock_normalised"
+            - "sequclidean_normalised"
             - "adjusted_cosine"
+            - "mahalanobis"
             - "knn"
 
         Returns:
@@ -342,7 +362,7 @@ class EmbeddingHandler:
             pwd = self.__calculate_pwd__(emb_space_name, metric)
             self.emb[emb_space_name]["distance"][metric] = pwd
         if rank:
-            pwd = self.get_distance_percentiles(emb_space_name, metric)
+            pwd = self.get_distance_percentiles(emb_space_name, metric, rank)
         return pwd
 
     def get_sample_distance_difference(
@@ -365,58 +385,6 @@ class EmbeddingHandler:
         delta_emb_pwd = pwd_1 - pwd_2
 
         return delta_emb_pwd
-
-    def plot_distances_per_rank(
-        self, emb_space_name: str, distance_metric: str
-    ):
-        self.__check_for_emb_space__(emb_space_name)
-        emb_pwd = self.get_sample_distance(
-            emb_space_name=emb_space_name,
-            metric=distance_metric,
-        )
-        df = global_percentiles_bins(emb_pwd)
-        fig = px.line(
-            df,
-            x="values",
-            y=[0] * len(df),
-            color="percentile",
-            line_shape="hv",
-            title="",
-            labels={
-                "values": f"{distance_metric_aliases[distance_metric]} distance in {emb_space_name}",
-            },
-            # alternate between light and dark grey
-            color_discrete_sequence=["lightgrey", "darkgrey"] * 50,
-        )
-        # add percentile as text
-        for percentile in df["percentile"].unique():
-            if percentile == 0:
-                continue
-            # y to be 2 if even percentile, 1 if odd percentile
-            if percentile / 10 % 2 == 0:
-                y_value = 1.5
-            else:
-                y_value = 1
-            # get first row of the percentile
-            x_value = df[df["percentile"] == percentile]["values"].min()
-            fig.add_annotation(
-                x=x_value,
-                y=y_value,
-                text=f"{percentile}th",
-                showarrow=False,
-            )
-        fig.update_traces(line=dict(width=20))
-        fig = update_fig_layout(fig)
-        fig.update_layout(
-            yaxis=dict(visible=False),  # remove y axis
-            showlegend=False,  # remove legend
-        )
-        # adjust size to be very narrow
-        fig.update_layout(
-            width=1000,
-            height=200,
-        )
-        return fig
 
     def visualise_emb_pca(self, emb_space_name: str, colour: str = None):
         self.__check_for_emb_space__(emb_space_name)
@@ -478,7 +446,9 @@ class EmbeddingHandler:
         )
         return fig
 
-    def plot_feature_cluster_overlap(self, emb_space_name: str, feature: str):
+    def plot_feature_cluster_overlap(
+        self, emb_space_name: str, feature: str
+    ) -> go.Figure:
         self.__check_col_in_meta_data__(feature)
         self.__check_for_emb_space__(emb_space_name)
 
@@ -504,7 +474,7 @@ class EmbeddingHandler:
 
     def plot_emb_hist(
         self,
-    ):
+    ) -> go.Figure:
         # merge embedding data into one dataframe with emb_name as column
         df_emb = pd.DataFrame(columns=["emb_space", "emb_values"])
         for emb_space in self.emb.keys():
@@ -753,7 +723,7 @@ class EmbeddingHandler:
         colour_group: str = None,
         colour_value_1: str = None,
         colour_value_2: str = None,
-        rank: bool = False,
+        rank: str = None,
     ):
         self.__check_for_emb_space__(emb_space_name_1)
         self.__check_for_emb_space__(emb_space_name_2)
@@ -810,7 +780,7 @@ class EmbeddingHandler:
                             colour.append("mixed")
 
                     colour_map = {
-                        "group": self.colour_map[colour_group][colour_value_1],
+                        "group": "darkred",  # self.colour_map[colour_group][colour_value_1],
                         "non_group": "lightgray",
                         "mixed": "lightsteelblue",
                     }
@@ -838,12 +808,8 @@ class EmbeddingHandler:
 
                     colour_map = {
                         "cross": "steelblue",
-                        f"{colour_value_1}": self.colour_map[colour_group][
-                            colour_value_1
-                        ],
-                        f"{colour_value_2}": self.colour_map[colour_group][
-                            colour_value_2
-                        ],
+                        f"{colour_value_1}": "darkred",  # self.colour_map[colour_group][colour_value_1],
+                        f"{colour_value_2}": "navy",  # self.colour_map[colour_group][colour_value_2],
                         "non_group": "lightgray",
                     }
 
@@ -859,6 +825,12 @@ class EmbeddingHandler:
                     f"{self.sample_names[i]} - {self.sample_names[j]}"
                 )
 
+        if rank in ["order", "normal_dis", "bimodal_dis"]:
+            title = f"Rank of {distance_metric_aliases[distance_metric]} distance values between {emb_space_name_1} and {emb_space_name_2} \
+            when adjusted by {rank}"
+        else:
+            title = f"{distance_metric_aliases[distance_metric]} distance values between {emb_space_name_1} and {emb_space_name_2}"
+
         fig = px.scatter(
             x=convert_to_1d_array(emb_pwd_1),
             y=convert_to_1d_array(emb_pwd_2),
@@ -866,21 +838,12 @@ class EmbeddingHandler:
                 "x": f"{emb_space_name_1} {distance_metric_aliases[distance_metric]} distance",
                 "y": f"{emb_space_name_2} {distance_metric_aliases[distance_metric]} distance",
             },
-            title=f"Scatter plot of {distance_metric_aliases[distance_metric]} distance values between {emb_space_name_1} and {emb_space_name_2}",
+            title=title,
             opacity=0.4,
             color=colour,
             color_discrete_map=colour_map,
             hover_data={"Sample pair": sample_names},
             hover_name=sample_names,
-        )
-        # add line at 45 degrees dashed
-        fig.add_shape(
-            type="line",
-            x0=0,
-            y0=0,
-            x1=max(emb_pwd_1.max(), emb_pwd_2.max()),
-            y1=max(emb_pwd_1.max(), emb_pwd_2.max()),
-            line=dict(color="black", width=2, dash="dash"),
         )
         # adjust x and y axis to be the same scale
         fig.update_xaxes(
@@ -1064,6 +1027,384 @@ class EmbeddingHandler:
         fig = update_fig_layout(fig)
         return fig
 
+    def plot_emb_dis_his_with_fitted_functions(
+        self,
+        emb_space_name: str,
+        distance_metric: str,
+        rank: str,
+    ):
+        self.__check_for_emb_space__(emb_space_name)
+
+        emb_pwd = self.get_sample_distance(
+            emb_space_name=emb_space_name,
+            metric=distance_metric,
+        )
+
+        if rank == "bimodal_dis":
+            fig = global_percentiles_gaussian_mixture(emb_pwd, plot=True)
+        elif rank == "normal_dis":
+            fig = global_percentiles_normal_distribution(emb_pwd, plot=True)
+        else:
+            raise ValueError(
+                f"Invalid value for rank: {rank}. Must be either 'normal_dis' or 'bimodal_dis'"
+            )
+        return fig
+
+
+def generate_unique_pairs(indices):
+    pairs = set()
+    for i in range(len(indices)):
+        for j in range(i + 1, len(indices)):
+            pairs.add((indices[i], indices[j]))
+    return list(pairs)
+
+
+def generate_cross_list_pairs(indices_1, indices_2):
+    pairs = set()
+    for i in range(len(indices_1)):
+        for j in range(len(indices_2)):
+            pair = tuple(sorted([indices_1[i], indices_2[j]]))
+            pairs.add(pair)
+    return list(pairs)
+
+
+def global_rank(arr):
+    """
+    Return the global rank of each value in the array.
+
+    Parameters:
+    arr (numpy.ndarray): Input 2D array.
+
+    Returns:
+    numpy.ndarray: Array with the same shape where each value is replaced by its global rank.
+    """
+    flattened = squareform(arr)
+    sorted_indices = np.argsort(
+        flattened
+    )  # returns the indices that would sort the array
+    ranks = np.argsort(sorted_indices)  # get the ranks of the sorted indices
+    percentile_array = squareform(ranks)
+    return percentile_array
+
+
+def global_percentiles_normal_distribution(arr, plot=False):
+    """
+    Return the global percentiles of each value in the array based on a normal distribution.
+
+    Args:
+        arr (_type_): Input 2D array.
+
+    Returns:
+        _type_: Array with the same shape where each value is replaced by its global percentile.
+    """
+    # check that at least 11 entries in the array
+    if len(arr) < 11:
+        raise ValueError("Array must have at least 11 entries.")
+
+    # flatten the array
+    flattened = squareform(arr)
+
+    # fit the data to a normal distribution
+    mu, std = np.mean(flattened), np.std(flattened)
+
+    if plot:
+        # Create a range of values for plotting the fitted distribution
+        x = np.linspace(min(flattened), max(flattened), 1000)
+
+        # Calculate the PDF of the GMM
+        pdf = np.zeros_like(x)
+        for mu, cov, weight in zip([mu], [std**2], [1]):
+            pdf += weight * stats.norm.pdf(x, loc=mu, scale=np.sqrt(cov))
+
+        # Create the histogram of the data and normalize it
+        hist_data = np.histogram(flattened, bins=30, density=True)
+        hist_x = (
+            hist_data[1][:-1] + hist_data[1][1:]
+        ) / 2  # Midpoints of bins
+        hist_y = hist_data[0]
+
+        # Create the plotly figure
+        fig = go.Figure()
+
+        # Add the histogram bars
+        fig.add_trace(
+            go.Bar(x=hist_x, y=hist_y, name="Histogram", opacity=0.6)
+        )
+
+        # Add the fitted GMM distribution line
+        fig.add_trace(
+            go.Scatter(
+                x=x, y=pdf, mode="lines", name="Fitted Normal Distribution"
+            )
+        )
+
+        # Update layout
+        fig.update_layout(
+            title="Histogram and Fitted Normal Distribution",
+            xaxis_title="Data Points",
+            yaxis_title="Density",
+            bargap=0.1,
+        )
+
+        fig = update_fig_layout(fig)
+
+        return fig
+
+    # calculate the percentiles
+    percentiles = stats.norm.cdf(flattened, mu, std) * 100
+
+    # reshape the percentiles to the original shape
+    percentiles = squareform(percentiles)
+
+    return percentiles
+
+
+def gmm_cdf(x, means, covariances, weights):
+    cdf = 0.0
+    for mu, cov, weight in zip(means, covariances, weights):
+        cdf += weight * stats.norm.cdf(x, loc=mu, scale=np.sqrt(cov))
+    return cdf
+
+
+def global_percentiles_gaussian_mixture(arr, plot=False):
+
+    # check that at least 11 entries in the array
+    if len(arr) < 11:
+        raise ValueError("Array must have at least 11 entries.")
+
+    # flatten the array
+    flattened = squareform(arr)
+
+    # fit the data to a Gaussian Mixture Model with 2 components
+    gmm = GaussianMixture(n_components=2)
+    gmm.fit(flattened.reshape(-1, 1))
+
+    # Extract the means, covariances, and weights of the components
+    means = gmm.means_.flatten()
+    covariances = gmm.covariances_.flatten()
+    weights = gmm.weights_
+
+    if plot:
+        # Create a range of values for plotting the fitted distribution
+        x = np.linspace(min(flattened), max(flattened), 1000)
+
+        # Calculate the PDF of the GMM
+        pdf = np.zeros_like(x)
+        for mu, cov, weight in zip(means, covariances, weights):
+            pdf += weight * stats.norm.pdf(x, loc=mu, scale=np.sqrt(cov))
+
+        # Create the histogram of the data and normalize it
+        hist_data = np.histogram(flattened, bins=30, density=True)
+        hist_x = (
+            hist_data[1][:-1] + hist_data[1][1:]
+        ) / 2  # Midpoints of bins
+        hist_y = hist_data[0]
+
+        # Create the plotly figure
+        fig = go.Figure()
+
+        # Add the histogram bars
+        fig.add_trace(
+            go.Bar(x=hist_x, y=hist_y, name="Histogram", opacity=0.6)
+        )
+
+        # Add the fitted GMM distribution line
+        fig.add_trace(
+            go.Scatter(
+                x=x, y=pdf, mode="lines", name="Fitted GMM Distribution"
+            )
+        )
+
+        # Update layout
+        fig.update_layout(
+            title="Histogram and Fitted GMM Distribution",
+            xaxis_title="Data Points",
+            yaxis_title="Density",
+            bargap=0.1,
+        )
+
+        fig = update_fig_layout(fig)
+
+        return fig
+
+    # Calculate the percentiles
+    percentiles = np.array(
+        [gmm_cdf(x, means, covariances, weights) for x in flattened]
+    )
+
+    # reshape the percentiles to the original shape
+    percentiles = squareform(percentiles)
+
+    return percentiles
+
+
+def get_scatter_plot(
+    emb_object: dict,
+    emb_space_name: str,
+    colour: str,
+    X_2d: np.array,
+    method: str,
+):
+    fig = px.scatter(
+        x=X_2d[:, 0],
+        y=X_2d[:, 1],
+        color=emb_object.meta_data[colour],
+        labels={"color": "Cluster"},
+        title=f"{method} visualization of variant embeddings of {emb_space_name} embeddings",
+        hover_data={
+            "Sample": emb_object.sample_names,
+        },
+        opacity=0.5,
+        color_discrete_map=emb_object.colour_map[colour],
+    )
+
+    # make square aspect ratio
+    fig.update_layout(
+        width=800,
+        height=800,
+        autosize=False,
+    )
+
+    # make dots proportional to number of samples
+    fig.update_traces(
+        marker=dict(size=max(10, (1 / len(emb_object.sample_names)) * 400))
+    )
+    fig = update_fig_layout(fig)
+    return fig
+
+
+def update_fig_layout(fig):
+    fig.update_layout(
+        template="plotly_white",
+        font=dict(family="Arial", size=12, color="black"),
+    )
+    # show line at y=0 and x=0
+    fig.update_xaxes(showline=True, linecolor="black", linewidth=2)
+    fig.update_yaxes(showline=True, linecolor="black", linewidth=2)
+    # hide gridlines
+    fig.update_xaxes(showgrid=False)
+    fig.update_yaxes(showgrid=False)
+    return fig
+
+
+def convert_to_1d_array(matrix):
+    """
+    Convert a 2D symmetric distance matrix to a 1D array of distances.
+
+    Parameters:
+    matrix (numpy.ndarray): 2D symmetric distance matrix.
+
+    Returns:
+    numpy.ndarray: 1D array of distances.
+    """
+    # Get the size of the matrix
+    n = matrix.shape[0]
+    m = matrix.shape[1]
+
+    # Initialize an empty array to store distances
+    distances = []
+
+    # Extract upper triangular part of the matrix (excluding diagonal)
+    for i in range(n):
+        for j in range(i + 1, m):
+            distances.append(matrix[i, j])
+
+    return np.array(distances)
+
+
+"""
+RETIRED CODE
+
+def global_percentiles_bins(arr):
+    if len(arr) < 11:
+        raise ValueError(
+            "Array must have at least 11 entries in order to compute ranks."
+        )
+    flattened = squareform(arr)
+    sorted_indices = np.argsort(flattened)
+    ranks = np.argsort(sorted_indices)
+    percentiles = (ranks / (len(flattened) - 1)) * 100
+    percentiles_rounded_up = np.ceil(percentiles / 10) * 10
+    percentile_df = pd.DataFrame(columns=["percentile", "values"])
+    for i in range(0, 110, 10):
+        values = flattened[percentiles_rounded_up == i]
+        percentile_df = pd.concat(
+            [
+                percentile_df,
+                pd.DataFrame(
+                    {"percentile": [i] * len(values), "values": values}
+                ),
+            ]
+        )
+    return percentile_df
+    
+    
+def row_percentiles(arr):
+
+    # Apply the percentile_rank function to each row
+    percentile_array = np.apply_along_axis(percentile_rank, 1, arr)
+    return percentile_array
+    
+    
+def percentile_rank(row):
+    sorted_indices = np.argsort(row)
+    ranks = np.argsort(sorted_indices)
+    percentiles = (ranks / (len(row) - 1)) * 100
+    percentiles_rounded_up = np.ceil(percentiles / 10) * 10
+    return percentiles_rounded_up
+
+    def plot_distances_per_rank(
+        self, emb_space_name: str, distance_metric: str
+    ):
+        self.__check_for_emb_space__(emb_space_name)
+        emb_pwd = self.get_sample_distance(
+            emb_space_name=emb_space_name,
+            metric=distance_metric,
+        )
+        df = global_percentiles_bins(emb_pwd)
+        fig = px.line(
+            df,
+            x="values",
+            y=[0] * len(df),
+            color="percentile",
+            line_shape="hv",
+            title="",
+            labels={
+                "values": f"{distance_metric_aliases[distance_metric]} distance in {emb_space_name}",
+            },
+            # alternate between light and dark grey
+            color_discrete_sequence=["lightgrey", "darkgrey"] * 50,
+        )
+        # add percentile as text
+        for percentile in df["percentile"].unique():
+            if percentile == 0:
+                continue
+            # y to be 2 if even percentile, 1 if odd percentile
+            if percentile / 10 % 2 == 0:
+                y_value = 1.5
+            else:
+                y_value = 1
+            # get first row of the percentile
+            x_value = df[df["percentile"] == percentile]["values"].min()
+            fig.add_annotation(
+                x=x_value,
+                y=y_value,
+                text=f"{percentile}th",
+                showarrow=False,
+            )
+        fig.update_traces(line=dict(width=20))
+        fig = update_fig_layout(fig)
+        fig.update_layout(
+            yaxis=dict(visible=False),  # remove y axis
+            showlegend=False,  # remove legend
+        )
+        # adjust size to be very narrow
+        fig.update_layout(
+            width=1000,
+            height=200,
+        )
+        return fig
+
     def plot_emb_dist_dif_percentiles(
         self,
         emb_space_name_1,
@@ -1072,13 +1413,14 @@ class EmbeddingHandler:
         subset_group=None,
         subset_group_value=None,
         compare_subset_to=None,
+        rank: str = "order",
     ):
         percentiles_1 = self.get_distance_percentiles(
-            emb_space_name_1, distance_metric
+            emb_space_name_1, distance_metric, rank
         )
 
         percentiles_2 = self.get_distance_percentiles(
-            emb_space_name_2, distance_metric
+            emb_space_name_2, distance_metric, rank
         )
         # set all values on the diagonal to 0
         np.fill_diagonal(percentiles_1, 0)
@@ -1222,177 +1564,5 @@ class EmbeddingHandler:
 
         return fig
 
-
-def generate_unique_pairs(indices):
-    pairs = set()
-    for i in range(len(indices)):
-        for j in range(i + 1, len(indices)):
-            pairs.add((indices[i], indices[j]))
-    return list(pairs)
-
-
-def generate_cross_list_pairs(indices_1, indices_2):
-    pairs = set()
-    for i in range(len(indices_1)):
-        for j in range(len(indices_2)):
-            pair = tuple(sorted([indices_1[i], indices_2[j]]))
-            pairs.add(pair)
-    return list(pairs)
-
-
-def percentile_rank(row):
-    """
-    Replace each value in the row with its percentile rank.
-
-    Parameters:
-    row (numpy.ndarray): Input 1D array (row).
-
-    Returns:
-    numpy.ndarray: Row with values replaced by their percentile ranks.
-    """
-    sorted_indices = np.argsort(row)
-    ranks = np.argsort(sorted_indices)
-    percentiles = (ranks / (len(row) - 1)) * 100
-    percentiles_rounded_up = np.ceil(percentiles / 10) * 10
-    return percentiles_rounded_up
-
-
-def row_percentiles(arr):
-    """
-    Replace each value in the array with its percentile rank relative to the row.
-
-    Parameters:
-    arr (numpy.ndarray): Input 2D array.
-
-    Returns:
-    numpy.ndarray: Array with the same shape where each value is replaced by its percentile rank.
-    """
-
-    # Apply the percentile_rank function to each row
-    percentile_array = np.apply_along_axis(percentile_rank, 1, arr)
-    return percentile_array
-
-
-def global_percentiles(arr):
-    """
-    Replace each value in the array with its global percentile rank, rounded up to the next multiple of ten.
-
-    Parameters:
-    arr (numpy.ndarray): Input 2D array.
-
-    Returns:
-    numpy.ndarray: Array with the same shape where each value is replaced by its global percentile rank.
-    """
-    # check that at least 11 entries in the array
-    if len(arr) < 11:
-        raise ValueError("Array must have at least 11 entries.")
-    flattened = squareform(arr)
-    sorted_indices = np.argsort(
-        flattened
-    )  # returns the indices that would sort the array
-    ranks = np.argsort(sorted_indices)  # get the ranks of the sorted indices
-    percentiles = (ranks / (len(flattened) - 1)) * 100  # calculate percentiles
-    percentiles_rounded_up = np.ceil(percentiles / 10) * 10
-    percentiles_rounded_up[percentiles_rounded_up == 0] = (
-        10  # replace 0 with 10
-    )
-    percentile_array = squareform(percentiles_rounded_up)
-    return percentile_array
-
-
-def global_percentiles_bins(arr):
-    if len(arr) < 11:
-        raise ValueError(
-            "Array must have at least 11 entries in order to compute ranks."
-        )
-    flattened = squareform(arr)
-    sorted_indices = np.argsort(flattened)
-    ranks = np.argsort(sorted_indices)
-    percentiles = (ranks / (len(flattened) - 1)) * 100
-    percentiles_rounded_up = np.ceil(percentiles / 10) * 10
-    percentile_df = pd.DataFrame(columns=["percentile", "values"])
-    for i in range(0, 110, 10):
-        values = flattened[percentiles_rounded_up == i]
-        percentile_df = pd.concat(
-            [
-                percentile_df,
-                pd.DataFrame(
-                    {"percentile": [i] * len(values), "values": values}
-                ),
-            ]
-        )
-    return percentile_df
-
-
-def get_scatter_plot(
-    emb_object: dict,
-    emb_space_name: str,
-    colour: str,
-    X_2d: np.array,
-    method: str,
-):
-    fig = px.scatter(
-        x=X_2d[:, 0],
-        y=X_2d[:, 1],
-        color=emb_object.meta_data[colour],
-        labels={"color": "Cluster"},
-        title=f"{method} visualization of variant embeddings of {emb_space_name} embeddings",
-        hover_data={
-            "Sample": emb_object.sample_names,
-        },
-        opacity=0.5,
-        color_discrete_map=emb_object.colour_map[colour],
-    )
-
-    # make square aspect ratio
-    fig.update_layout(
-        width=800,
-        height=800,
-        autosize=False,
-    )
-
-    # make dots proportional to number of samples
-    fig.update_traces(
-        marker=dict(size=max(10, (1 / len(emb_object.sample_names)) * 400))
-    )
-    fig = update_fig_layout(fig)
-    return fig
-
-
-def update_fig_layout(fig):
-    fig.update_layout(
-        template="plotly_white",
-        font=dict(family="Arial", size=12, color="black"),
-    )
-    # show line at y=0 and x=0
-    fig.update_xaxes(showline=True, linecolor="black", linewidth=2)
-    fig.update_yaxes(showline=True, linecolor="black", linewidth=2)
-    # hide gridlines
-    fig.update_xaxes(showgrid=False)
-    fig.update_yaxes(showgrid=False)
-    return fig
-
-
-def convert_to_1d_array(matrix):
-    """
-    Convert a 2D symmetric distance matrix to a 1D array of distances.
-
-    Parameters:
-    matrix (numpy.ndarray): 2D symmetric distance matrix.
-
-    Returns:
-    numpy.ndarray: 1D array of distances.
-    """
-    # Get the size of the matrix
-    n = matrix.shape[0]
-    m = matrix.shape[1]
-
-    # Initialize an empty array to store distances
-    distances = []
-
-    # Extract upper triangular part of the matrix (excluding diagonal)
-    for i in range(n):
-        for j in range(i + 1, m):
-            distances.append(matrix[i, j])
-
-    return np.array(distances)
+    
+"""
