@@ -844,6 +844,7 @@ class EmbeddingHandler:
         emb_space_name: str,
         distance_metric: str,
         feature: str,
+        rank: str = None
     ):
         self.__check_for_emb_space__(emb_space_name)
         if feature in self.pw_meta_data.keys():
@@ -863,7 +864,7 @@ class EmbeddingHandler:
                         feature_values[i] - feature_values[j]
                     )
 
-        emb_pwd = self.get_sample_distance(emb_space_name, distance_metric)
+        emb_pwd = self.get_sample_distance(emb_space_name, distance_metric, rank)
 
         # convert into 1D array
         emb_pwd_flat = convert_to_1d_array(emb_pwd)
@@ -880,15 +881,13 @@ class EmbeddingHandler:
                     f"{self.sample_names[i]} - {self.sample_names[j]}"
                 )
 
-        fig = go.Figure()
-        fig.add_trace(
-            go.Scatter(
-                x=emb_pwd_flat,
-                y=feature_matrix_flat,
-                mode="markers",
-                marker=dict(color="darkred", size=3),
-                hovertext=sample_names,
-            )
+        fig = px.scatter(
+            x=emb_pwd_flat,
+            y=feature_matrix_flat,
+            hover_data={"sample": sample_names},
+            marginal_x="histogram",
+            marginal_y="histogram",
+            color_discrete_sequence=["darkred"],
         )
 
         fig.update_layout(
@@ -1212,12 +1211,14 @@ class EmbeddingHandler:
         fig = update_fig_layout(fig)
         return fig
 
-    def plot_emb_dis_dif_violin(
+    def plot_emb_dis_dif_dis_per_group(
         self,
         emb_space_name: str,
         distance_metric: str,
         group: str,
+        group_value: str = None,
         rank: str = None,
+        plot_type: str = "violin",
     ):
         self.__check_for_emb_space__(emb_space_name)
         self.__check_col_categorical__(group)
@@ -1229,11 +1230,24 @@ class EmbeddingHandler:
 
         # stratify the pairs of indices by group
         sample_ids_per_group = self.__sample_indices_to_groups__(group=group)
+
         group_combinations = list(
             itertools.combinations_with_replacement(
                 sample_ids_per_group.keys(), 2
             )
         )
+
+        if group_value is not None:
+            if group_value not in sample_ids_per_group.keys():
+                raise ValueError(f"{group_value} not found in {group}")
+
+            group_combinations = [
+                (group_1, group_2)
+                for group_1, group_2 in group_combinations
+                if (group_1 == group_value) or (group_2 == group_value)
+            ]
+
+        # filter group
 
         # for each group combination, get the pairwise distances
         group_pw_distances = {}
@@ -1279,17 +1293,37 @@ class EmbeddingHandler:
                 ]
             )
 
-        fig = px.violin(
-            df,
-            x="group",
-            y="distance",
-            color="pair_type",
+        if plot_type == "violin":
+            fig = px.violin(
+                df,
+                x="group",
+                y="distance",
+                color="pair_type",
+                color_discrete_sequence=["slategray", "lightsteelblue"],
+            )
+        elif plot_type == "box":
+            fig = px.box(
+                df,
+                x="group",
+                y="distance",
+                color="pair_type",
+                color_discrete_map={
+                    "within_group": "slategray",
+                    "outside_group": "lightsteelblue",
+                },
+            )
+        else:
+            raise ValueError(
+                f"Invalid value for plot_type: {plot_type}. Must be either 'violin' or 'box'"
+            )
+        # update title
+        fig.update_layout(
             title=f"Distribution of {distance_metric_aliases[distance_metric]} distance values per {group}",
-            labels={
-                "distance": f"{distance_metric_aliases[distance_metric]} distance",
-                "group": "",
-            },
-            color_discrete_sequence=["slategray", "lightsteelblue"],
+        )
+        # update x and y axis labels
+        fig.update_xaxes(title_text="")
+        fig.update_yaxes(
+            title_text=f"{distance_metric_aliases[distance_metric]} distance difference"
         )
         fig.for_each_trace(
             lambda trace: trace.update(
@@ -1352,6 +1386,8 @@ def generate_cross_list_pairs(indices_1, indices_2):
         for j in range(len(indices_2)):
             pair = tuple(sorted([indices_1[i], indices_2[j]]))
             pairs.add(pair)
+    # remove pairs where the indices are the same
+    pairs = set([pair for pair in pairs if pair[0] != pair[1]])
     return list(pairs)
 
 
