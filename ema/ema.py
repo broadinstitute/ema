@@ -117,7 +117,7 @@ class EmbeddingHandler:
         ValueError: If emb_space_name is not present in emb.
         """
         if emb_space_name not in self.emb.keys():
-            raise ValueError  # Add error message
+            raise ValueError(f"Embedding space {emb_space_name} not found.")
         else:
             return True
 
@@ -1220,7 +1220,6 @@ class EmbeddingHandler:
         rank: str = None,
     ):
         self.__check_for_emb_space__(emb_space_name)
-
         self.__check_col_categorical__(group)
 
         # get pairs of indices for each group
@@ -1262,20 +1261,23 @@ class EmbeddingHandler:
                 ] = "outside_group"
 
         # create a dataframe for plotting
-        df = pd.DataFrame(
-            columns=["group", "distance", "pair_type"],
-            data=[
-                (
-                    group_name,
-                    distance,
-                    group_pw_distances[group_name]["pair_type"],
-                )
-                for group_name, group_data in group_pw_distances.items()
-                for distance, pair_type in zip(
-                    group_data["pw_distances"], group_data["pair_type"]
-                )
-            ],
-        )
+        df = pd.DataFrame(columns=["group", "distance", "pair_type"])
+
+        for group_combination, group_data in group_pw_distances.items():
+            df = pd.concat(
+                [
+                    df,
+                    pd.DataFrame(
+                        {
+                            "group": [group_combination]
+                            * len(group_data["pw_distances"]),
+                            "distance": group_data["pw_distances"],
+                            "pair_type": [group_data["pair_type"]]
+                            * len(group_data["pw_distances"]),
+                        }
+                    ),
+                ]
+            )
 
         fig = px.violin(
             df,
