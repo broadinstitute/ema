@@ -21,7 +21,7 @@ distance_metric_aliases = {
     "cosine": "Cosine",
     "sqeuclidean": "Standardised Euclidean",
     "sqeuclidean_normalised": "Normalised Standardised Euclidean",
-    "euclidean_normalised": "Normalised Euclidean",  # replace with "Normalised Euclidean"
+    "euclidean_normalised": "Normalised Euclidean",
     "cityblock_normalised": "Normalised Manhattan",
     "adjusted_cosine": "Adjusted Cosine",
     "knn": "K-Nearest Neighbours",
@@ -767,7 +767,7 @@ class EmbeddingHandler:
         fig = update_fig_layout(fig)
         return fig
 
-    def plot_emb_dist_heatmap(
+    def plot_emb_dis_heatmap(
         self,
         emb_space_name: str,
         distance_metric: str,
@@ -834,7 +834,7 @@ class EmbeddingHandler:
         fig = update_fig_layout(fig)
         return fig
 
-    def plot_emb_dist_box(
+    def plot_emb_dis_box(
         self,
         group: str,
         distance_metric: str,
@@ -970,7 +970,7 @@ class EmbeddingHandler:
         fig = update_fig_layout(fig)
         return fig
 
-    def plot_emb_dist_scatter(
+    def plot_emb_dis_scatter(
         self,
         emb_space_name_1: str,
         emb_space_name_2: str,
@@ -1059,32 +1059,6 @@ class EmbeddingHandler:
                         else:
                             colour.append("non_group")
                     colour_map = None
-                # group_indices = self.meta_data[
-                #     self.meta_data[colour_group] == colour_value_1
-                # ].index.tolist()
-                # non_group_indices = list(
-                #     set(
-                #         set(range(0, len(self.sample_names)))
-                #         - set(group_indices)
-                #     )
-                # )
-
-                # colour = []
-
-                # for i in range(len(self.sample_names)):
-                #     for j in range(i + 1, len(self.sample_names)):
-                #         if i in group_indices and j in group_indices:
-                #             colour.append("group")
-                #         elif i in non_group_indices and j in non_group_indices:
-                #             colour.append("non_group")
-                #         else:
-                #             colour.append("mixed")
-
-                #     colour_map = {
-                #         "group": "darkred",  # self.colour_map[colour_group][colour_value_1],
-                #         "non_group": "lightgray",
-                #         "mixed": "lightsteelblue",
-                #     }
 
             else:
                 group_indices_1 = self.meta_data[
@@ -1110,8 +1084,8 @@ class EmbeddingHandler:
 
                     colour_map = {
                         "cross": "steelblue",
-                        f"{colour_value_1}": "darkred",  # self.colour_map[colour_group][colour_value_1],
-                        f"{colour_value_2}": "navy",  # self.colour_map[colour_group][colour_value_2],
+                        f"{colour_value_1}": "darkred",
+                        f"{colour_value_2}": "navy",
                         "non_group": "lightgray",
                     }
 
@@ -1161,7 +1135,7 @@ class EmbeddingHandler:
 
         return fig
 
-    def plot_emb_dist_hist(self, distance_metric):
+    def plot_emb_dis_hist(self, distance_metric):
         for emb_space_name in self.emb.keys():
             if "distance" not in self.emb[emb_space_name].keys():
                 self.emb[emb_space_name]["distance"] = dict()
@@ -1550,8 +1524,6 @@ class EmbeddingHandler:
             return fig
 
         else:
-
-            # plot the emb values for each dimension coloured by the feature
 
             # create a dataframe with the emb values and the feature
             df = pd.DataFrame(
