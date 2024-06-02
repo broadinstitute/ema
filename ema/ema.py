@@ -36,6 +36,16 @@ class EmbeddingHandler:
         Parameters:
         sample_meta_data (pd.DataFrame): Meta data for samples.
             Should have sample names in the first column.
+
+        Object attributes:
+        meta_data (pd.DataFrame): Meta data for samples.
+        meta_data_first_column (str): Name of the first column in meta_data.
+        meta_data_numeric_columns (list): List of numerical columns in meta_data.
+        meta_data_categorical_columns (list): List of categorical columns in meta_data.
+        pw_meta_data (dict): Pairwise meta data.
+        sample_names (list): List of sample names.
+        colour_map (dict): Colour map for features in meta_data.
+        emb (dict): Embedding spaces.
         """
         self.meta_data = sample_meta_data
         self.meta_data_first_column = self.meta_data.columns[0]
@@ -144,6 +154,8 @@ class EmbeddingHandler:
         """
         if col not in self.meta_data_categorical_columns:
             raise ValueError(f"Column {col} is not categorical in meta data.")
+            return False
+        return True
 
     def __check_col_numeric__(self, col) -> None:
         """Check if col is numerical in meta_data.
@@ -156,6 +168,8 @@ class EmbeddingHandler:
         """
         if col not in self.meta_data_numeric_columns:
             raise ValueError(f"Column {col} is not numerical in meta data.")
+            return False
+        return True
 
     def __sample_indices_to_groups__(self, group: str) -> dict:
         """Convert sample indices to groups based on a column in meta_data.
@@ -174,7 +188,9 @@ class EmbeddingHandler:
             ].index.tolist()
         return group_indices
 
-    def __calculate_clusters__(self, emb_space_name: str, n_clusters: int):
+    def __calculate_clusters__(
+        self, emb_space_name: str, n_clusters: int = None
+    ):
         """Calculate clusters using KMeans clustering algorithm.
         If n_clusters is not provided, the number of clusters is calculated
         based on the number of unique values in the meta_data columns.
@@ -378,6 +394,20 @@ class EmbeddingHandler:
             )
         return
 
+    def recalculate_clusters(
+        self, emb_space_name: str, n_clusters: int = None
+    ):
+        """Recalculate clusters for an embedding space.
+
+        Parameters:
+        emb_space_name (str): Name of the embedding space.
+        n_clusters (int): Number of clusters. If not provided, the number of clusters
+        is calculated based on the number of unique values in the meta_data columns.
+        """
+        self.__check_for_emb_space__(emb_space_name)
+        self.__calculate_clusters__(emb_space_name, n_clusters)
+        return
+
     def get_sample_names(self) -> list:
         """Return list of sample names.
 
@@ -385,6 +415,24 @@ class EmbeddingHandler:
             list: List of sample names.
         """
         return self.sample_names
+
+    def get_samples_per_group_value(
+        self, group: str, group_value: str
+    ) -> pd.DataFrame:
+        """Return sample names for a group value.
+
+        Parameters:
+        group (str): Column name in meta_data.
+        group_value (str): Value in the column.
+
+        Returns:
+            list: List of sample names.
+        """
+        self.__check_col_categorical__(group)
+        if group_value not in self.meta_data[group].unique():
+            raise ValueError(f"{group_value} not found in {group}.")
+        group_samples = self.meta_data[self.meta_data[group] == group_value]
+        return group_samples
 
     def get_emb(self, emb_space_name: str) -> np.array:
         """Return embedding space.
@@ -428,6 +476,20 @@ class EmbeddingHandler:
         self.__check_col_categorical__(group)
         group_values = self.meta_data[group].unique().tolist()
         group_values = sorted(group_values)
+        return group_values
+
+    def get_value_count_per_group(self, group: str) -> pd.DataFrame:
+        """Return unique values in a column of meta_data and their counts.
+
+        Args:
+            group (str): Column name in meta_data.
+
+        Returns:
+            pd.DataFrame: Unique values in the column and their counts.
+        """
+        self.__check_col_categorical__(group)
+        group_values = self.meta_data[group].value_counts().reset_index()
+        group_values.columns = [group, "count"]
         return group_values
 
     def get_distance_percentiles(
@@ -500,7 +562,9 @@ class EmbeddingHandler:
             self.__check_for_emb_space__(emb_space_name)
 
         pwd_1 = self.get_sample_distance(
-            emb_space_name_1, distance_metric, rank
+            emb_space_name_1,
+            distance_metric,
+            rank,
         )
         pwd_2 = self.get_sample_distance(
             emb_space_name_2, distance_metric, rank
@@ -623,6 +687,8 @@ class EmbeddingHandler:
             },
             marginal="box",
             opacity=0.5,
+            # do not stack
+            barmode="overlay",
         )
         fig.update_layout(
             legend=dict(
@@ -844,7 +910,7 @@ class EmbeddingHandler:
         emb_space_name: str,
         distance_metric: str,
         feature: str,
-        rank: str = None
+        rank: str = None,
     ):
         self.__check_for_emb_space__(emb_space_name)
         if feature in self.pw_meta_data.keys():
@@ -864,7 +930,9 @@ class EmbeddingHandler:
                         feature_values[i] - feature_values[j]
                     )
 
-        emb_pwd = self.get_sample_distance(emb_space_name, distance_metric, rank)
+        emb_pwd = self.get_sample_distance(
+            emb_space_name, distance_metric, rank
+        )
 
         # convert into 1D array
         emb_pwd_flat = convert_to_1d_array(emb_pwd)
@@ -888,12 +956,15 @@ class EmbeddingHandler:
             marginal_x="histogram",
             marginal_y="histogram",
             color_discrete_sequence=["darkred"],
+            opacity=0.5,
         )
 
         fig.update_layout(
             title=f"Correlation between pair-wise {distance_metric} distance vs {feature} distance for {emb_space_name} <br> Spearman correlation: {corr:.2f} <br> p-value: {p_value:.2f}",
             xaxis_title=f"{distance_metric_aliases[distance_metric]} distance",
             yaxis_title=feature,
+            width=800,
+            height=600,
         )
         fig.update_layout(showlegend=False)
         fig = update_fig_layout(fig)
@@ -942,32 +1013,79 @@ class EmbeddingHandler:
 
         if colour_group is not None:
             if colour_value_2 is None:
-                group_indices = self.meta_data[
-                    self.meta_data[colour_group] == colour_value_1
-                ].index.tolist()
-                non_group_indices = list(
-                    set(
-                        set(range(0, len(self.sample_names)))
-                        - set(group_indices)
+                # find incides of all groups
+                sample_indices_per_group = self.__sample_indices_to_groups__(
+                    colour_group
+                )
+                pairs_of_groups = list(
+                    itertools.combinations_with_replacement(
+                        sample_indices_per_group.keys(), 2
                     )
                 )
 
-                colour = []
+                # remove nan from sample_indices_per_group if present
+                sample_indices_per_group = {
+                    key: value
+                    for key, value in sample_indices_per_group.items()
+                    if key is not np.nan
+                }
 
+                # filter for pairs of groups that contain colour_value_1
+                pairs_of_groups = [
+                    pair for pair in pairs_of_groups if colour_value_1 in pair
+                ]
+
+                colour = []
+                # get indices of samples for each group
                 for i in range(len(self.sample_names)):
                     for j in range(i + 1, len(self.sample_names)):
-                        if i in group_indices and j in group_indices:
-                            colour.append("group")
-                        elif i in non_group_indices and j in non_group_indices:
-                            colour.append("non_group")
-                        else:
-                            colour.append("mixed")
+                        # get group of sample i
+                        group_i = [
+                            key
+                            for key, value in sample_indices_per_group.items()
+                            if i in value
+                        ][0]
+                        group_j = [
+                            key
+                            for key, value in sample_indices_per_group.items()
+                            if j in value
+                        ][0]
 
-                    colour_map = {
-                        "group": "darkred",  # self.colour_map[colour_group][colour_value_1],
-                        "non_group": "lightgray",
-                        "mixed": "lightsteelblue",
-                    }
+                        if (group_i, group_j) in pairs_of_groups:
+                            colour.append("{} - {}".format(group_i, group_j))
+                        elif (group_j, group_i) in pairs_of_groups:
+                            colour.append("{} - {}".format(group_j, group_i))
+
+                        else:
+                            colour.append("non_group")
+                    colour_map = None
+                # group_indices = self.meta_data[
+                #     self.meta_data[colour_group] == colour_value_1
+                # ].index.tolist()
+                # non_group_indices = list(
+                #     set(
+                #         set(range(0, len(self.sample_names)))
+                #         - set(group_indices)
+                #     )
+                # )
+
+                # colour = []
+
+                # for i in range(len(self.sample_names)):
+                #     for j in range(i + 1, len(self.sample_names)):
+                #         if i in group_indices and j in group_indices:
+                #             colour.append("group")
+                #         elif i in non_group_indices and j in non_group_indices:
+                #             colour.append("non_group")
+                #         else:
+                #             colour.append("mixed")
+
+                #     colour_map = {
+                #         "group": "darkred",  # self.colour_map[colour_group][colour_value_1],
+                #         "non_group": "lightgray",
+                #         "mixed": "lightsteelblue",
+                #     }
+
             else:
                 group_indices_1 = self.meta_data[
                     self.meta_data[colour_group] == colour_value_1
@@ -1371,6 +1489,107 @@ class EmbeddingHandler:
             )
         return fig
 
+    def plot_emb_cor_per_dim(
+        self,
+        emb_space_name: str,
+        feature: str,
+    ):
+        self.__check_for_emb_space__(emb_space_name)
+        self.__check_col_in_meta_data__(feature)
+
+        emb_values = self.emb[emb_space_name]["emb"]
+        feature_values = self.meta_data[feature].values
+
+        if feature in self.meta_data_numeric_columns:
+
+            # calculate the correlation between each dimension of the embedding and the feature
+            corrs = []
+            p_values = []
+            p_values_sig = []
+
+            p_value_sig_threshold = 0.05 / emb_values.shape[1]
+
+            for i in range(emb_values.shape[1]):
+                corr, p_value = stats.spearmanr(
+                    emb_values[:, i], feature_values
+                )
+                corrs.append(corr)
+                p_values.append(p_value)
+                p_values_sig.append(p_value < p_value_sig_threshold)
+            fig = px.scatter(
+                x=list(range(1, emb_values.shape[1] + 1)),
+                y=corrs,
+                color=p_values_sig,
+                hover_data={
+                    "Dimension": list(range(1, emb_values.shape[1] + 1)),
+                    "Correlation": corrs,
+                    "p-value": p_values,
+                },
+                labels={
+                    "x": "Dimension",
+                    "y": "Spearman correlation with feature",
+                },
+                color_discrete_map={True: "darkred", False: "lightgray"},
+            )
+            fig.update_layout(
+                title=f"Spearman correlation between each dimension of the {emb_space_name} embedding and {feature}",
+                xaxis_title="Dimension",
+                yaxis_title="Correlation",
+            )
+            # rename legend
+            fig.for_each_trace(
+                lambda trace: trace.update(
+                    name=(
+                        f"P-value < {p_value_sig_threshold}"
+                        if trace.name == "True"
+                        else "Not significant"
+                    )
+                )
+            )
+            fig = update_fig_layout(fig)
+            return fig
+
+        else:
+
+            # plot the emb values for each dimension coloured by the feature
+
+            # create a dataframe with the emb values and the feature
+            df = pd.DataFrame(
+                emb_values,
+                columns=[
+                    f"Dimension {i+1}" for i in range(emb_values.shape[1])
+                ],
+            )
+
+            # add the feature values
+            df[feature] = feature_values
+
+            # melt the dataframe
+
+            df_melt = df.melt(
+                id_vars=[feature],
+                var_name="Dimension",
+                value_name="Embedding value",
+            )
+
+            # create the plot
+            fig = px.scatter(
+                df_melt,
+                x="Dimension",
+                y="Embedding value",
+                color=feature,
+                labels={
+                    "Embedding value": "Embedding value",
+                    "Dimension": "Dimension",
+                    feature: feature,
+                },
+                opacity=0.5,
+                title=f"Embedding values for each dimension of the {emb_space_name} embedding coloured by {feature}",
+            )
+            fig = update_fig_layout(fig)
+
+            return fig
+
 
 def generate_unique_pairs(indices):
     pairs = set()
@@ -1633,259 +1852,3 @@ def convert_to_1d_array(matrix):
             distances.append(matrix[i, j])
 
     return np.array(distances)
-
-
-"""
-RETIRED CODE
-
-def global_percentiles_bins(arr):
-    if len(arr) < 11:
-        raise ValueError(
-            "Array must have at least 11 entries in order to compute ranks."
-        )
-    flattened = squareform(arr)
-    sorted_indices = np.argsort(flattened)
-    ranks = np.argsort(sorted_indices)
-    percentiles = (ranks / (len(flattened) - 1)) * 100
-    percentiles_rounded_up = np.ceil(percentiles / 10) * 10
-    percentile_df = pd.DataFrame(columns=["percentile", "values"])
-    for i in range(0, 110, 10):
-        values = flattened[percentiles_rounded_up == i]
-        percentile_df = pd.concat(
-            [
-                percentile_df,
-                pd.DataFrame(
-                    {"percentile": [i] * len(values), "values": values}
-                ),
-            ]
-        )
-    return percentile_df
-    
-    
-def row_percentiles(arr):
-
-    # Apply the percentile_rank function to each row
-    percentile_array = np.apply_along_axis(percentile_rank, 1, arr)
-    return percentile_array
-    
-    
-def percentile_rank(row):
-    sorted_indices = np.argsort(row)
-    ranks = np.argsort(sorted_indices)
-    percentiles = (ranks / (len(row) - 1)) * 100
-    percentiles_rounded_up = np.ceil(percentiles / 10) * 10
-    return percentiles_rounded_up
-
-    def plot_distances_per_rank(
-        self, emb_space_name: str, distance_metric: str
-    ):
-        self.__check_for_emb_space__(emb_space_name)
-        emb_pwd = self.get_sample_distance(
-            emb_space_name=emb_space_name,
-            metric=distance_metric,
-        )
-        df = global_percentiles_bins(emb_pwd)
-        fig = px.line(
-            df,
-            x="values",
-            y=[0] * len(df),
-            color="percentile",
-            line_shape="hv",
-            title="",
-            labels={
-                "values": f"{distance_metric_aliases[distance_metric]} distance in {emb_space_name}",
-            },
-            # alternate between light and dark grey
-            color_discrete_sequence=["lightgrey", "darkgrey"] * 50,
-        )
-        # add percentile as text
-        for percentile in df["percentile"].unique():
-            if percentile == 0:
-                continue
-            # y to be 2 if even percentile, 1 if odd percentile
-            if percentile / 10 % 2 == 0:
-                y_value = 1.5
-            else:
-                y_value = 1
-            # get first row of the percentile
-            x_value = df[df["percentile"] == percentile]["values"].min()
-            fig.add_annotation(
-                x=x_value,
-                y=y_value,
-                text=f"{percentile}th",
-                showarrow=False,
-            )
-        fig.update_traces(line=dict(width=20))
-        fig = update_fig_layout(fig)
-        fig.update_layout(
-            yaxis=dict(visible=False),  # remove y axis
-            showlegend=False,  # remove legend
-        )
-        # adjust size to be very narrow
-        fig.update_layout(
-            width=1000,
-            height=200,
-        )
-        return fig
-
-    def plot_emb_dist_dif_percentiles(
-        self,
-        emb_space_name_1,
-        emb_space_name_2,
-        distance_metric,
-        subset_group=None,
-        subset_group_value=None,
-        compare_subset_to=None,
-        rank: str = "order",
-    ):
-        percentiles_1 = self.get_distance_percentiles(
-            emb_space_name_1, distance_metric, rank
-        )
-
-        percentiles_2 = self.get_distance_percentiles(
-            emb_space_name_2, distance_metric, rank
-        )
-        # set all values on the diagonal to 0
-        np.fill_diagonal(percentiles_1, 0)
-        np.fill_diagonal(percentiles_2, 0)
-
-        # if subset is provided, only use the subset
-        if subset_group is not None:
-            self.__check_col_categorical__(subset_group)
-            # check if subset_group_value is in the meta_data
-            if subset_group_value is not None:
-                if (
-                    subset_group_value
-                    not in self.meta_data[subset_group].unique()
-                ):
-                    raise ValueError(
-                        f"{subset_group_value} not found in {subset_group}"
-                    )
-
-            # get indices of the subset
-            subset_indices = self.meta_data[
-                self.meta_data[subset_group] == subset_group_value
-            ].index.tolist()
-
-            if compare_subset_to is not None:
-                if compare_subset_to == "within_group":
-                    percentiles_1 = percentiles_1[subset_indices, :][
-                        :, subset_indices
-                    ]
-                    percentiles_2 = percentiles_2[subset_indices, :][
-                        :, subset_indices
-                    ]
-                elif compare_subset_to == "outside_group":
-                    other_indices = list(
-                        set(
-                            set(range(len(self.sample_names)))
-                            - set(subset_indices)
-                        )
-                    )
-                    percentiles_1 = percentiles_1[subset_indices, :][
-                        :, other_indices
-                    ]
-                    percentiles_2 = percentiles_2[subset_indices, :][
-                        :, other_indices
-                    ]
-                else:
-                    raise ValueError(
-                        f"Invalid value for compare_subset_to: {compare_subset_to}. \
-                            Must be either 'within_group' or 'outside_group'"
-                    )
-            else:
-                percentiles_1 = percentiles_1[subset_indices, :]
-                percentiles_2 = percentiles_2[subset_indices, :]
-
-        percentiles_1 = convert_to_1d_array(percentiles_1)
-        percentiles_2 = convert_to_1d_array(percentiles_2)
-
-        # get uniqiue percentiles
-        percentiles = np.unique(np.concatenate((percentiles_1, percentiles_2)))
-        percentiles.sort()
-
-        # create a mapping from percentile to index
-        percentile_to_index = {
-            percentile: i for i, percentile in enumerate(percentiles)
-        }
-
-        # initialise a count matrix
-        count_matrix = np.zeros((len(percentiles), len(percentiles)))
-
-        # populate the count matrix
-        for i in range(len(percentiles_1)):
-            count_matrix[
-                percentile_to_index[percentiles_1[i]],
-                percentile_to_index[percentiles_2[i]],
-            ] += 1
-
-        # Prepare Sankey diagram data
-        source = []
-        target = []
-        value = []
-
-        for i in range(len(percentiles)):
-            for j in range(len(percentiles)):
-                if count_matrix[i, j] > 0:
-                    source.append(i)
-                    target.append(
-                        j + len(percentiles)
-                    )  # Offset target indices for better separation
-                    value.append(count_matrix[i, j])
-
-        df_links = pd.DataFrame(
-            {"source": source, "target": target, "value": value}
-        )
-        df_links.sort_values(["source", "target"], inplace=True)
-        source = df_links["source"].tolist()
-        target = df_links["target"].tolist()
-        value = df_links["value"].tolist()
-
-        # define node labelss
-        labels = [
-            f"{percentile} {emb_space_name_1}" for percentile in percentiles
-        ]
-        labels += [
-            f"{percentile} {emb_space_name_2}" for percentile in percentiles
-        ]
-        # colours of the respective embedding_space
-        colors = [
-            self.emb[emb_space_name_1]["colour"]
-            for _ in range(len(percentiles))
-        ] + [
-            self.emb[emb_space_name_2]["colour"]
-            for _ in range(len(percentiles))
-        ]
-
-        fig = go.Figure(
-            data=[
-                go.Sankey(
-                    node=dict(
-                        pad=15,
-                        thickness=20,
-                        line=dict(color="black", width=0.5),
-                        label=labels,
-                        color=colors,
-                    ),
-                    link=dict(
-                        source=source,
-                        target=target,
-                        value=value,
-                        color=["lightsteelblue" for _ in value],
-                    ),
-                    textfont=dict(color="black", family="Arial", size=12),
-                )
-            ]
-        )
-        # set dimensions
-        fig.update_layout(
-            width=800,
-            height=800,
-            autosize=False,
-        )
-        fig = update_fig_layout(fig)
-
-        return fig
-
-    
-"""
