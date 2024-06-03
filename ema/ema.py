@@ -188,6 +188,8 @@ class EmbeddingHandler:
         """
         self.__check_col_categorical__(group)
         group_indices = dict()
+        # convert all values in the meta data to strings
+        self.meta_data[group] = self.meta_data[group].astype(str)
         for group_name in self.meta_data[group].unique():
             group_indices[group_name] = self.meta_data[
                 self.meta_data[group] == group_name
@@ -999,7 +1001,10 @@ class EmbeddingHandler:
             self.__check_col_categorical__(colour_group)
             # check if subset_group_value is in the meta_data
             if colour_value_1 is not None:
-                if colour_value_1 not in self.meta_data[colour_group].unique():
+                if colour_value_1 not in [
+                    str(value)
+                    for value in self.meta_data[colour_group].unique()
+                ]:
                     raise ValueError(
                         f"{colour_value_1} not found in {colour_group}"
                     )
@@ -1036,11 +1041,11 @@ class EmbeddingHandler:
                 )
 
                 # remove nan from sample_indices_per_group if present
-                sample_indices_per_group = {
-                    key: value
-                    for key, value in sample_indices_per_group.items()
-                    if key is not np.nan
-                }
+                # sample_indices_per_group = {
+                #     key: value
+                #     for key, value in sample_indices_per_group.items()
+                #     if key is not np.nan
+                # }
 
                 # filter for pairs of groups that contain colour_value_1
                 pairs_of_groups = [
@@ -1052,16 +1057,20 @@ class EmbeddingHandler:
                 for i in range(len(self.sample_names)):
                     for j in range(i + 1, len(self.sample_names)):
                         # get group of sample i
-                        group_i = [
-                            key
-                            for key, value in sample_indices_per_group.items()
-                            if i in value
-                        ][0]
-                        group_j = [
-                            key
-                            for key, value in sample_indices_per_group.items()
-                            if j in value
-                        ][0]
+                        group_i = str(
+                            [
+                                key
+                                for key, value in sample_indices_per_group.items()
+                                if i in value
+                            ][0]
+                        )
+                        group_j = str(
+                            [
+                                key
+                                for key, value in sample_indices_per_group.items()
+                                if j in value
+                            ][0]
+                        )
 
                         if (group_i, group_j) in pairs_of_groups:
                             colour.append("{} - {}".format(group_i, group_j))
