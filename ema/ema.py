@@ -217,7 +217,7 @@ class EmbeddingHandler:
                     n_clusters = 15
             else:
                 n_clusters = 5
-        km = KMeans(n_clusters=n_clusters)
+        km = KMeans(n_clusters=n_clusters, random_state=8)
         km.fit(self.emb[emb_space_name]["emb"])
         km.predict(self.emb[emb_space_name]["emb"])
 
