@@ -101,6 +101,7 @@ class EmbeddingHandler:
                 )
                 continue
             colour_map[column] = dict()
+
             colours = px.colors.qualitative.Set2 + px.colors.qualitative.Set3
 
             # Check if the colours list is empty
@@ -114,7 +115,12 @@ class EmbeddingHandler:
                     raise IndexError(
                         f"The index i is out of range for {column_values}"
                     )
-                colour_map[column][value] = colours[i]
+                if str(value) == "True":
+                    colour_map[column][value] = "steelblue"
+                elif str(value) == "False":
+                    colour_map[column][value] = "darkred"
+                else:
+                    colour_map[column][value] = colours[i]
         return colour_map
 
     def __check_for_emb_space__(self, emb_space_name: str) -> None:
@@ -643,17 +649,23 @@ class EmbeddingHandler:
         # plot a bar plot with features on x-axis and number of samples on y-axis
         # coloured by the different clusters
 
-        fig = px.bar(
-            self.meta_data,
-            x=feature,
-            color="cluster_" + emb_space_name,
-            title=f"Agreement between unsupervised clusters and {feature} clusters for {emb_space_name} embeddings",
-            labels={
-                "cluster_" + emb_space_name: "Unsupervised cluster",
-                feature: feature.capitalize(),
-                "count": "Number of samples",
-            },
-            color_discrete_map=self.colour_map["cluster_" + emb_space_name],
+        fig = (
+            px.bar(
+                self.meta_data,
+                x=feature,
+                color="cluster_" + emb_space_name,
+                title=f"Agreement between unsupervised clusters and {feature} clusters for {emb_space_name} embeddings",
+                labels={
+                    "cluster_" + emb_space_name: "Unsupervised cluster",
+                    feature: feature.capitalize(),
+                    "count": "Number of samples",
+                },
+                color_discrete_map=self.colour_map[
+                    "cluster_" + emb_space_name
+                ],
+            )
+            .update_traces(marker_line_width=0)
+            .update_layout(xaxis_showgrid=False, yaxis_showgrid=False)
         )
         # order x-axis categories by category name
         fig.update_xaxes(categoryorder="category ascending")
@@ -1107,6 +1119,12 @@ class EmbeddingHandler:
         else:
             title = f"{distance_metric_aliases[distance_metric]} distance values between {emb_space_name_1} and {emb_space_name_2}"
 
+        # calucalte correlation between emb_pwd_1 and emb_pwd_2
+
+        corr, p_value = stats.spearmanr(
+            convert_to_1d_array(emb_pwd_1), convert_to_1d_array(emb_pwd_2)
+        )
+
         fig = px.scatter(
             x=convert_to_1d_array(emb_pwd_1),
             y=convert_to_1d_array(emb_pwd_2),
@@ -1120,6 +1138,10 @@ class EmbeddingHandler:
             color_discrete_map=colour_map,
             hover_data={"Sample pair": sample_names},
             hover_name=sample_names,
+        )
+        # add correlation to title
+        fig.update_layout(
+            title=f"{title} <br> Spearman correlation: {corr:.2f} <br> p-value: {p_value:.4f}"
         )
         # adjust x and y axis to be the same scale
         fig.update_xaxes(
