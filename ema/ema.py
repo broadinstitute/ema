@@ -116,9 +116,9 @@ class EmbeddingHandler:
                         f"The index i is out of range for {column_values}"
                     )
                 if str(value) == "True":
-                    colour_map[column][value] = "steelblue"
+                    colour_map[column][str(value)] = "steelblue"
                 elif str(value) == "False":
-                    colour_map[column][value] = "darkred"
+                    colour_map[column][str(value)] = "darkred"
                 else:
                     colour_map[column][value] = colours[i]
         return colour_map
@@ -600,6 +600,10 @@ class EmbeddingHandler:
             X_2d=X_2d,
             method="PCA",
         )
+        # fig.update_layout(
+        #     legend=dict(
+        #         title=f"{colour.capitalize()}",)
+        # )
         return fig
 
     def visualise_emb_umap(self, emb_space_name: str, colour: str = None):
@@ -1040,13 +1044,6 @@ class EmbeddingHandler:
                     )
                 )
 
-                # remove nan from sample_indices_per_group if present
-                # sample_indices_per_group = {
-                #     key: value
-                #     for key, value in sample_indices_per_group.items()
-                #     if key is not np.nan
-                # }
-
                 # filter for pairs of groups that contain colour_value_1
                 pairs_of_groups = [
                     pair for pair in pairs_of_groups if colour_value_1 in pair
@@ -1142,7 +1139,7 @@ class EmbeddingHandler:
                 "y": f"{emb_space_name_2} {distance_metric_aliases[distance_metric]} distance",
             },
             title=title,
-            opacity=0.4,
+            opacity=0.7,
             color=colour,
             color_discrete_map=colour_map,
             hover_data={"Sample pair": sample_names},
@@ -1342,6 +1339,7 @@ class EmbeddingHandler:
         group_value: str = None,
         rank: str = None,
         plot_type: str = "violin",
+        log_scale: bool = False,
     ):
         self.__check_for_emb_space__(emb_space_name)
         self.__check_col_categorical__(group)
@@ -1446,7 +1444,7 @@ class EmbeddingHandler:
         # update x and y axis labels
         fig.update_xaxes(title_text="")
         fig.update_yaxes(
-            title_text=f"{distance_metric_aliases[distance_metric]} distance difference"
+            title_text=f"{distance_metric_aliases[distance_metric]} distances"
         )
         fig.for_each_trace(
             lambda trace: trace.update(
@@ -1468,6 +1466,11 @@ class EmbeddingHandler:
                 x=1,
             ),
         )
+        if log_scale:
+            fig.update_yaxes(
+                type="log",
+                title_text=f"Log of {distance_metric_aliases[distance_metric]} distances",
+            )
         fig = update_fig_layout(fig)
         return fig
 
@@ -1793,7 +1796,7 @@ def get_scatter_plot(
     fig = px.scatter(
         x=X_2d[:, 0],
         y=X_2d[:, 1],
-        color=emb_object.meta_data[colour],
+        color=[str(value) for value in emb_object.meta_data[colour]],
         labels={"color": "Cluster"},
         title=f"{method} visualization of variant embeddings of {emb_space_name} embeddings",
         hover_data={
