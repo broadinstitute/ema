@@ -28,7 +28,7 @@ jupyter lab colab_notebooks    # open notebook examples in jupyter for local exp
 ```
 
 ## Usage
-Ema allows you to compare embedding spaces from different protein language models. Uses include:
+ema allows you to compare embedding spaces from different protein language models. Uses include:
 - Unsupervised clustering in the embedded space
 - Visualizing clusters with PCA, UMAP, and t-SNE plots of embedding spaces for each model
 - Scatterplot distances between sequences, compared across embedding spaces (For example, seq 1 and seq 2 have distance x in embedding space 1 and distance y in embedding space 2)
