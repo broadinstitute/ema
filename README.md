@@ -1,5 +1,5 @@
 # ema
-A library for comparing protein embedding spaces for different models
+A library for comparing protein embedding spaces for different models.
 
 ## Colab Notebook Examples
 
