@@ -14,4 +14,4 @@ jobs:
           target_repo_url:
             git@github.com:broadinstitute/ema.git
           ssh_private_key:                              # <-- use 'secrets' to pass credential information.
-            ${{ secrets.GITHUB_SSH_PRIVATE_KEY }}
+            ${{ secrets.SSH_PRIVATE_KEY_GITHUB }}
