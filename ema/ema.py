@@ -24,7 +24,6 @@ distance_metric_aliases = {
     "euclidean_normalised": "Normalised Euclidean",
     "cityblock_normalised": "Normalised Manhattan",
     "adjusted_cosine": "Adjusted Cosine",
-    "knn": "K-Nearest Neighbours",
     "mahalanobis": "Mahalanobis",
 }
 
@@ -528,7 +527,7 @@ class EmbeddingHandler:
             emb_space_name (str): Name of the embedding space.
             distance_metric (str): Name of the distance metric.
             rank (str): Name of the rank method. Either "order", "normal_dis" \
-                or "poisson_dis".
+                or "bimodal_dis".
 
         Returns:
             np.array: Array with the percentiles of the pairwise \
@@ -545,7 +544,7 @@ class EmbeddingHandler:
         return percentiles
 
     def get_sample_distance(
-        self, emb_space_name: str, metric: str, rank: bool = False
+        self, emb_space_name: str, metric: str, rank: str = None
     ) -> np.array:
         """Calculate pairwise distance between samples in the embedding space.\
             Columns and rows are ordered by the order of samples in the \
@@ -564,6 +563,9 @@ class EmbeddingHandler:
             - "sequclidean_normalised"
             - "adjusted_cosine"
             - "mahalanobis"
+        rank (str, optional): Either "order", "normal_dis" or "bimodal_dis". \
+            If rank is not None, the distance matrix is converted to \
+            percentiles before returning. Default is None.
 
         Returns:
         np.array: Pairwise distance matrix.
@@ -587,26 +589,25 @@ class EmbeddingHandler:
         emb_space_name_1: str,
         emb_space_name_2: str,
         distance_metric: str,
-        rank: bool = False,
+        rank: str = None,
     ) -> np.array:
         """Calculate the difference between two pairwise distance matrices. \
         The difference is calculated as pwd_1 - pwd_2. \
-        If rank is True, the distance matrices are converted to percentiles \
-        before calculating the difference.
+        If rank is not None, the distance matrices are converted to \
+        percentiles before calculating the difference.
 
         Args:
             emb_space_name_1 (str): Name of the first embedding space.
             emb_space_name_2 (str): Name of the second embedding space.
             distance_metric (str): Name of the distance metric.
-            rank (bool, optional): Boolean to describe whether to convert \
-                the distance matrix to percentiles before calculating \
-                    the difference. Defaults to False.
+            rank (str, optional): Name of the rank method. Either "order", \
+                "normal_dis" or "bimodal_dis". Default is None.
 
         Returns:
             np.array: Pairwise distance matrix difference. \
                 Each element is the difference between the corresponding \
                 elements in the two distance matrices. \
-                If rank is True, the difference is in percentiles.
+                If rank is not None the difference is in percentiles.
         """
         for emb_space_name in [emb_space_name_1, emb_space_name_2]:
             self.__check_for_emb_space__(emb_space_name)
@@ -777,8 +778,7 @@ class EmbeddingHandler:
                 self.meta_data,
                 x=feature,
                 color="cluster_" + emb_space_name,
-                # 
-                title=f"Agreement between unsupervised clusters and {feature} clusters for {emb_space_name} embeddings",
+                title=f"Agreement between unsupervised clusters and {feature} clusters for {emb_space_name} embeddings",  # noqa
                 labels={
                     "cluster_" + emb_space_name: "Unsupervised cluster",
                     feature: feature.capitalize(),
@@ -845,7 +845,18 @@ class EmbeddingHandler:
         fig = update_fig_layout(fig)
         return fig
 
-    def plot_emb_box(self, group: str):
+    def plot_emb_box(self, group: str) -> go.Figure:
+        """Plot box plot of embedding values for all embedding spaces. \
+            Statified by a categorical column in the meta_data. \
+            The colour of the box plots corresponds to the embedding space.
+
+        Args:
+            group (str): Categorical column in the meta_data. \
+                or "sample" to stratify by sample names.
+
+        Returns:
+            go.Figure: Box plot.
+        """
         # group: either "sample" or "meta_col"
         if group != "sample":
             self.__check_col_categorical__(group)
@@ -916,8 +927,29 @@ class EmbeddingHandler:
         distance_metric: str,
         order_x: str = None,
         order_y: str = None,
-        rank: bool = False,
-    ):
+        rank: str = False,
+    ) -> go.Figure:
+        """Plot heatmap of pairwise distance matrix for an embedding space. \
+            The distance matrix is calculated using a distance metric. \
+            The samples can be ordered by a categorical column in the \
+            meta_data. The heatmap is coloured based on the distance values. \
+            If rank is True, the distance matrix is converted to percentiles \
+            before plotting.
+
+        Args:
+            emb_space_name (str): Name of the embedding space.
+            distance_metric (str): Name of the distance metric.
+            order_x (str, optional): Categorical column in the meta_data to \
+                order the samples on the x-axis. Defaults to None.
+            order_y (str, optional): Categorical column in the meta_data to \
+                order the samples on the y-axis. Defaults to None.
+            rank (str, optional): Either "order", "normal_dis" or \
+                "bimodal_dis". If rank is True, the distance matrix is \
+                converted to percentiles before plotting. Defaults to None.
+
+        Returns:
+            go.Figure: Heatmap plot.
+        """
         self.__check_for_emb_space__(emb_space_name)
         if order_x is not None:
             self.__check_col_categorical__(order_x)
@@ -958,9 +990,9 @@ class EmbeddingHandler:
             order_y_indices = list(range(len(self.sample_names)))
 
         if rank:
-            title = f"Rank of {distance_metric_aliases[distance_metric]} distance matrix of {emb_space_name} embedding space"
+            title = f"Rank of {distance_metric_aliases[distance_metric]} distance matrix of {emb_space_name} embedding space"  # noqa
         else:
-            title = f"{distance_metric_aliases[distance_metric]} distance matrix of {emb_space_name} embedding space"
+            title = f"{distance_metric_aliases[distance_metric]} distance matrix of {emb_space_name} embedding space"  # noqa
 
         fig = px.imshow(
             emb_pwd,
@@ -981,7 +1013,19 @@ class EmbeddingHandler:
         self,
         group: str,
         distance_metric: str,
-    ):
+    ) -> go.Figure:
+        """Plot box plot of pairwise distance values for all embedding \
+            spaces. The distance values are stratified by a categorical \
+            column in the meta_data. The colour of the box plots corresponds \
+            to the embedding space.
+
+        Args:
+            group (str): Categorical column in the meta_data.
+            distance_metric (str): Name of the distance metric.
+
+        Returns:
+            go.Figure: Box plot.
+        """
         # group: either "sample" or "meta_col"
         if group != "sample":
             self.__check_col_categorical__(group)
@@ -1026,12 +1070,12 @@ class EmbeddingHandler:
             x="emb_group",
             y="emb_values",
             color="emb_space",
-            title=f"Distribution of {distance_metric_aliases[distance_metric]} distance values per {group}",
+            title=f"Distribution of {distance_metric_aliases[distance_metric]} distance values per {group}",  # noqa
             color_discrete_map={
                 emb: self.emb[emb]["colour"] for emb in self.emb.keys()
             },
             labels={
-                "emb_values": f"{distance_metric_aliases[distance_metric]} distance",
+                "emb_values": f"{distance_metric_aliases[distance_metric]} distance",  # noqa
                 "emb_group": "",
             },
         )
@@ -1054,7 +1098,22 @@ class EmbeddingHandler:
         distance_metric: str,
         feature: str,
         rank: str = None,
-    ):
+    ) -> go.Figure:
+        """Plot scatter plot of pair-wise distance values vs continuous \
+            feature values. The correlation between the two is calculated \
+            using Spearman correlation. The plot is for a specific embedding \
+            space.
+
+        Args:
+            emb_space_name (str): Name of the embedding space.
+            distance_metric (str): Name of the distance metric.
+            feature (str): Continuous column in the meta_data.
+            rank (str, optional): Name of the rank method. Either "order", \
+                "normal_dis" or "bimodal_dis". Defaults to None.
+
+        Returns:
+            go.Figure: _description_
+        """
         self.__check_for_emb_space__(emb_space_name)
         if feature in self.pw_meta_data.keys():
             feature_matrix = self.pw_meta_data[feature]
@@ -1103,7 +1162,7 @@ class EmbeddingHandler:
         )
 
         fig.update_layout(
-            title=f"Correlation between pair-wise {distance_metric} distance vs {feature} distance for {emb_space_name} <br> Spearman correlation: {corr:.2f} <br> p-value: {p_value:.2f}",
+            title=f"Correlation between pair-wise {distance_metric} distance vs {feature} distance for {emb_space_name} <br> Spearman correlation: {corr:.2f} <br> p-value: {p_value:.2f}",  # noqa
             xaxis_title=f"{distance_metric_aliases[distance_metric]} distance",
             yaxis_title=feature,
             width=800,
@@ -1122,7 +1181,34 @@ class EmbeddingHandler:
         colour_value_1: str = None,
         colour_value_2: str = None,
         rank: str = None,
-    ):
+    ) -> go.Figure:
+        """Plot scatter plot of pair-wise distance values between two \
+            embedding spaces. The distance values are coloured based on a \
+            categorical column in the meta_data. The plot is for a specific \
+            embedding space. If only the colour_group is provided, the plot \
+            will show all pairs of groups. If colour_value_1 and \
+            colour_value_2 are provided, the plot will colour the distance \
+            between the two groups.
+
+        Args:
+            emb_space_name_1 (str): Name of the first embedding space on the \
+                x-axis.
+            emb_space_name_2 (str): Name of the second embedding space on \
+                the y-axis.
+            distance_metric (str): Name of the distance metric.
+            colour_group (str, optional): Categorical column in the meta_data \
+                to colour the data points. Defaults to None.
+            colour_value_1 (str, optional): Value in the colour_group to \
+                colour the data points. Defaults to None.
+            colour_value_2 (str, optional): Value in the colour_group to \
+                colour the data points. Defaults to None.
+            rank (str, optional): Name of the rank method. Either "order", \
+                "normal_dis" or "bimodal_dis". Defaults to None.
+
+        Returns:
+            go.Figure: Scatter plot.
+        """
+
         self.__check_for_emb_space__(emb_space_name_1)
         self.__check_for_emb_space__(emb_space_name_2)
 
@@ -1182,14 +1268,14 @@ class EmbeddingHandler:
                         group_i = str(
                             [
                                 key
-                                for key, value in sample_indices_per_group.items()
+                                for key, value in sample_indices_per_group.items()  # noqa
                                 if i in value
                             ][0]
                         )
                         group_j = str(
                             [
                                 key
-                                for key, value in sample_indices_per_group.items()
+                                for key, value in sample_indices_per_group.items()  # noqa
                                 if j in value
                             ][0]
                         )
@@ -1237,7 +1323,7 @@ class EmbeddingHandler:
                         f"{colour_value_1}-{colour_value_2}": "steelblue",
                         f"{colour_value_1}-{colour_value_1}": "darkred",
                         f"{colour_value_2}-{colour_value_2}": "navy",
-                        f"Not {colour_value_1} or {colour_value_2}": "lightgray",
+                        f"Not {colour_value_1} or {colour_value_2}": "lightgray",  # noqa
                     }
 
         else:
@@ -1253,13 +1339,11 @@ class EmbeddingHandler:
                 )
 
         if rank in ["order", "normal_dis", "bimodal_dis"]:
-            title = f"Rank of {distance_metric_aliases[distance_metric]} distance values between {emb_space_name_1} and {emb_space_name_2} \
-            when adjusted by {rank}"
+            title = f"Rank of {distance_metric_aliases[distance_metric]} distance values between {emb_space_name_1} and {emb_space_name_2} when adjusted by {rank}"  # noqa
         else:
-            title = f"{distance_metric_aliases[distance_metric]} distance values between {emb_space_name_1} and {emb_space_name_2}"
+            title = f"{distance_metric_aliases[distance_metric]} distance values between {emb_space_name_1} and {emb_space_name_2}"  # noqa
 
         # calucalte correlation between emb_pwd_1 and emb_pwd_2
-
         corr, p_value = stats.spearmanr(
             convert_to_1d_array(emb_pwd_1), convert_to_1d_array(emb_pwd_2)
         )
@@ -1268,8 +1352,8 @@ class EmbeddingHandler:
             x=convert_to_1d_array(emb_pwd_1),
             y=convert_to_1d_array(emb_pwd_2),
             labels={
-                "x": f"{emb_space_name_1} {distance_metric_aliases[distance_metric]} distance",
-                "y": f"{emb_space_name_2} {distance_metric_aliases[distance_metric]} distance",
+                "x": f"{emb_space_name_1} {distance_metric_aliases[distance_metric]} distance",  # noqa
+                "y": f"{emb_space_name_2} {distance_metric_aliases[distance_metric]} distance",  # noqa
             },
             title=title,
             opacity=0.7,
@@ -1280,16 +1364,16 @@ class EmbeddingHandler:
         )
         # add correlation to title
         fig.update_layout(
-            title=f"{title} <br> Spearman correlation: {corr:.2f} <br> p-value: {p_value:.4f}"
+            title=f"{title} <br> Spearman correlation: {corr:.2f} <br> p-value: {p_value:.4f}"  # noqa
         )
         # adjust x and y axis to be the same scale
         fig.update_xaxes(
             range=[0, max(emb_pwd_1.max() * 1.1, emb_pwd_2.max() * 1.1)],
-            title=f"{emb_space_name_1} {distance_metric_aliases[distance_metric]} distance",
+            title=f"{emb_space_name_1} {distance_metric_aliases[distance_metric]} distance",  # noqa
         )
         fig.update_yaxes(
             range=[0, max(emb_pwd_1.max() * 1.1, emb_pwd_2.max() * 1.1)],
-            title=f"{emb_space_name_2} {distance_metric_aliases[distance_metric]} distance",
+            title=f"{emb_space_name_2} {distance_metric_aliases[distance_metric]} distance",  # noqa
         )
         fig = update_fig_layout(fig)
         # update text size of axes and legend
@@ -1314,7 +1398,18 @@ class EmbeddingHandler:
 
         return fig
 
-    def plot_emb_dis_hist(self, distance_metric):
+    def plot_emb_dis_hist(self, distance_metric: str) -> go.Figure:
+        """Plot histogram of pairwise distance values for all embedding \
+            spaces. The distance values are flattened and plotted as a \
+            histogram. The colour of the histogram bars corresponds to the \
+            embedding space.
+
+        Args:
+            distance_metric (str): Name of the distance metric.
+
+        Returns:
+            go.Figure: Histogram plot.
+        """
         for emb_space_name in self.emb.keys():
             if "distance" not in self.emb[emb_space_name].keys():
                 self.emb[emb_space_name]["distance"] = dict()
@@ -1339,7 +1434,7 @@ class EmbeddingHandler:
                 )
             )
         fig.update_layout(
-            title=f"Distribution of {distance_metric_aliases[distance_metric]} distance values for {len(self.emb.keys())} embedding spaces",
+            title=f"Distribution of {distance_metric_aliases[distance_metric]} distance values for {len(self.emb.keys())} embedding spaces",  # noqa
             xaxis_title=f"{distance_metric_aliases[distance_metric]} distance",
             yaxis_title="Number of samples",
             barmode="overlay",
@@ -1352,8 +1447,25 @@ class EmbeddingHandler:
         emb_space_name_1: str,
         emb_space_name_2: str,
         distance_metric: str,
-        rank: bool = False,
-    ):
+        rank: str = None,
+    ) -> go.Figure:
+        """Plot heatmap of pairwise distance difference matrix between two \
+            embedding spaces. The distance difference matrix is calculated \
+            by subtracting the distance matrix of emb_space_name_2 from \
+            emb_space_name_1. The heatmap is coloured based on the distance \
+            values. If rank is True, the distance matrix is converted to \
+            percentiles before the calculation.
+
+        Args:
+            emb_space_name_1 (str): Name of the first embedding space.
+            emb_space_name_2 (str): Name of the second embedding space.
+            distance_metric (str): Name of the distance metric.
+            rank (str, optional): Name of the rank method. Either "order", \
+                "normal_dis" or "bimodal_dis". Defaults to None.
+
+        Returns:
+            go.Figure: _description_
+        """
         for emb_space_name in [emb_space_name_1, emb_space_name_2]:
             self.__check_for_emb_space__(emb_space_name)
         emb_pwd_diff = self.get_sample_distance_difference(
@@ -1363,9 +1475,9 @@ class EmbeddingHandler:
             rank=rank,
         )
         if rank:
-            title = f"Rank of {distance_metric_aliases[distance_metric]} distance difference matrix from {emb_space_name_1} to {emb_space_name_2} embedding space"
+            title = f"Rank of {distance_metric_aliases[distance_metric]} distance difference matrix from {emb_space_name_1} to {emb_space_name_2} embedding space"  # noqa
         else:
-            title = f"{distance_metric_aliases[distance_metric]} distance difference matrix from {emb_space_name_1} to {emb_space_name_2} embedding space"
+            title = f"{distance_metric_aliases[distance_metric]} distance difference matrix from {emb_space_name_1} to {emb_space_name_2} embedding space"  # noqa
         fig = px.imshow(
             emb_pwd_diff,
             labels=dict(
@@ -1385,8 +1497,26 @@ class EmbeddingHandler:
         return fig
 
     def plot_emb_dis_dif_box(
-        self, emb_space_name_1, emb_space_name_2, group, distance_metric
-    ):
+        self,
+        emb_space_name_1: str,
+        emb_space_name_2: str,
+        group: str,
+        distance_metric: str,
+    ) -> go.Figure:
+        """Plot box plot of pairwise distance difference values between two \
+            embedding spaces. The distance difference values are stratified \
+            by a categorical column in the meta_data. The colour of the box \
+            plots corresponds to the pair of embedding spaces.
+
+        Args:
+            emb_space_name_1 (str): Name of the first embedding space.
+            emb_space_name_2 (str): Name of the second embedding space.
+            group (str): Categorical column in the meta_data.
+            distance_metric (str): Name of the distance metric.
+
+        Returns:
+            go.Figure: Box plot.
+        """
         self.__check_col_categorical__(group)
 
         group_ids = self.__sample_indices_to_groups__(group=group)
@@ -1403,7 +1533,7 @@ class EmbeddingHandler:
             other_indices = list(
                 set(list(range(len(self.sample_names)))) - set(indices)
             )
-            pairs_within_group = generate_unique_pairs(indices)
+            pairs_within_group = get_unique_pairs(indices)
             pairs_with_outside_group = generate_cross_list_pairs(
                 indices_1=indices, indices_2=other_indices
             )
@@ -1436,13 +1566,13 @@ class EmbeddingHandler:
             x="group",
             y="distance",
             color="pair_type",
-            title=f"Distribution of {distance_metric_aliases[distance_metric]} distance difference values per {group}",
+            title=f"Distribution of {distance_metric_aliases[distance_metric]} distance difference values per {group}",  # noqa
             color_discrete_map={
                 "within_group": "slategray",
                 "outside_group": "lightsteelblue",
             },
             labels={
-                "distance": f"{distance_metric_aliases[distance_metric]} distance difference",
+                "distance": f"{distance_metric_aliases[distance_metric]} distance difference",  # noqa
                 "group": "",
             },
         )
@@ -1482,7 +1612,7 @@ class EmbeddingHandler:
         fig = update_fig_layout(fig)
         return fig
 
-    def plot_emb_dis_dif_dis_per_group(
+    def plot_emb_dis_per_group(
         self,
         emb_space_name: str,
         distance_metric: str,
@@ -1491,7 +1621,31 @@ class EmbeddingHandler:
         rank: str = None,
         plot_type: str = "violin",
         log_scale: bool = False,
-    ):
+    ) -> go.Figure:
+        """Plot distribution of pairwise distance values stratified by a \
+            categorical column in the meta_data. The plot can be either a \
+            violin plot or a box plot. The distance values are coloured based \
+            on whether the pairs of samples are within the same group or \
+            between different groups. If group_value is provided, the plot \
+            will only show the distribution of distance values for that group.
+
+        Args:
+            emb_space_name (str): Name of the embedding space.
+            distance_metric (str): Name of the distance metric.
+            group (str): Categorical column in the meta_data.
+            group_value (str, optional): If provided, the plot will only show \
+                the distribution of distance values for that group. Defaults \
+                to None.
+            rank (str, optional): Name of the rank method. Either "order", \
+                "normal_dis" or "bimodal_dis". Defaults to None.
+            plot_type (str, optional): Either "violin" or "box". Defaults to \
+                "violin".
+            log_scale (bool, optional): If True, the y-axis will be in log \
+                scale. Defaults to False.
+
+        Returns:
+            go.Figure: Violin or box plot.
+        """
         self.__check_for_emb_space__(emb_space_name)
         self.__check_col_categorical__(group)
 
@@ -1586,11 +1740,11 @@ class EmbeddingHandler:
             )
         else:
             raise ValueError(
-                f"Invalid value for plot_type: {plot_type}. Must be either 'violin' or 'box'"
+                f"Invalid value for plot_type: {plot_type}. Must be either 'violin' or 'box'"  # noqa
             )
         # update title
         fig.update_layout(
-            title=f"Distribution of {distance_metric_aliases[distance_metric]} distance values per {group}",
+            title=f"Distribution of {distance_metric_aliases[distance_metric]} distance values per {group}",  # noqa
         )
         # update x and y axis labels
         fig.update_xaxes(title_text="")
@@ -1620,7 +1774,7 @@ class EmbeddingHandler:
         if log_scale:
             fig.update_yaxes(
                 type="log",
-                title_text=f"Log of {distance_metric_aliases[distance_metric]} distances",
+                title_text=f"Log of {distance_metric_aliases[distance_metric]} distances",  # noqa
             )
         fig = update_fig_layout(fig)
         # make font of axes and legend bigger
@@ -1639,7 +1793,23 @@ class EmbeddingHandler:
         emb_space_name: str,
         distance_metric: str,
         rank: str,
-    ):
+    ) -> go.Figure:
+        """Plot histogram of pairwise distance values for all embedding \
+            spaces. The distance values are flattened and plotted as a \
+            histogram. The colour of the histogram bars corresponds to the \
+            embedding space. The plot also includes fitted Gaussian or \
+            Bi-modal Gaussian mixture functions. The rank parameter is used \
+            to determine which function to fit.
+
+        Args:
+            emb_space_name (str): Name of the embedding space.
+            distance_metric (str): Name of the distance metric.
+            rank (str): Name of the rank method. Either "normal_dis" or \
+                "bimodal_dis".
+
+        Returns:
+            go.Figure: Histogram plot.
+        """
         self.__check_for_emb_space__(emb_space_name)
 
         emb_pwd = self.get_sample_distance(
@@ -1653,7 +1823,7 @@ class EmbeddingHandler:
             fig = global_percentiles_normal_distribution(emb_pwd, plot=True)
         else:
             raise ValueError(
-                f"Invalid value for rank: {rank}. Must be either 'normal_dis' or 'bimodal_dis'"
+                f"Invalid value for rank: {rank}. Must be either 'normal_dis' or 'bimodal_dis'"  # noqa
             )
         return fig
 
@@ -1661,7 +1831,18 @@ class EmbeddingHandler:
         self,
         emb_space_name: str,
         feature: str,
-    ):
+    ) -> go.Figure:
+        """Plot scatter plot of embedding values for each dimension of the \
+            embedding space with a continuous or categorical column in the \
+            meta_data. The plot is coloured based on the feature values.
+
+        Args:
+            emb_space_name (str): Name of the embedding space.
+            feature (str): Continuous or categorical column in the meta_data.
+
+        Returns:
+            go.Figure: Scatter plot.
+        """
         self.__check_for_emb_space__(emb_space_name)
         self.__check_col_in_meta_data__(feature)
 
@@ -1670,7 +1851,8 @@ class EmbeddingHandler:
 
         if feature in self.meta_data_numeric_columns:
 
-            # calculate the correlation between each dimension of the embedding and the feature
+            # calculate the correlation between each dimension
+            # of the embedding and the feature
             corrs = []
             p_values = []
             p_values_sig = []
@@ -1700,7 +1882,7 @@ class EmbeddingHandler:
                 color_discrete_map={True: "darkred", False: "lightgray"},
             )
             fig.update_layout(
-                title=f"Spearman correlation between each dimension of the {emb_space_name} embedding and {feature}",
+                title=f"Spearman correlation between each dimension of the {emb_space_name} embedding and {feature}",  # noqa
                 xaxis_title="Dimension",
                 yaxis_title="Correlation",
             )
@@ -1750,7 +1932,7 @@ class EmbeddingHandler:
                     feature: feature,
                 },
                 opacity=0.5,
-                title=f"Embedding values for each dimension of the {emb_space_name} embedding coloured by {feature}",
+                title=f"Embedding values for each dimension of the {emb_space_name} embedding coloured by {feature}",  # noqa
             )
             fig = update_fig_layout(fig)
 
@@ -1763,7 +1945,23 @@ class EmbeddingHandler:
         group: str,
         group_value: str = None,
         rank: str = None,
-    ):
+    ) -> dict:
+        """Returns a dictionary with the distance values stratified by a \
+            categorical column in the meta_data. The keys of the dictionary \
+            are the group names and the values are lists of distance values. \
+            If group_value is provided, the dictionary will only contain the \
+            distance values for that group.
+
+        Args:
+            emb_space_name (str): Name of the embedding space.
+            distance_metric (str): Name of the distance metric.
+            group (str): Categorical column in the meta_data.
+            group_value (str, optional): If provided, the distance values \
+                will only be returned for that group. Defaults to None.
+            rank (str, optional): Name of the rank method. Either "order", \
+                "normal_dis" or "bimodal_dis". Defaults to None.
+
+        """
         self.__check_for_emb_space__(emb_space_name)
         self.__check_col_categorical__(group)
 
@@ -1848,26 +2046,7 @@ class EmbeddingHandler:
         return distances_per_group
 
 
-def generate_unique_pairs(indices):
-    pairs = set()
-    for i in range(len(indices)):
-        for j in range(i + 1, len(indices)):
-            pairs.add((indices[i], indices[j]))
-    return list(pairs)
-
-
-def generate_cross_list_pairs(indices_1, indices_2):
-    pairs = set()
-    for i in range(len(indices_1)):
-        for j in range(len(indices_2)):
-            pair = tuple(sorted([indices_1[i], indices_2[j]]))
-            pairs.add(pair)
-    # remove pairs where the indices are the same
-    pairs = set([pair for pair in pairs if pair[0] != pair[1]])
-    return list(pairs)
-
-
-def global_rank(arr):
+def global_rank(arr: np.ndarray) -> np.ndarray:
     """
     Return the global rank of each value in the array.
 
@@ -1875,7 +2054,8 @@ def global_rank(arr):
     arr (numpy.ndarray): Input 2D array.
 
     Returns:
-    numpy.ndarray: Array with the same shape where each value is replaced by its global rank.
+    numpy.ndarray: Array with the same shape where each value is replaced by \
+        its global rank.
     """
     flattened = squareform(arr)
     sorted_indices = np.argsort(
@@ -1886,15 +2066,20 @@ def global_rank(arr):
     return percentile_array
 
 
-def global_percentiles_normal_distribution(arr, plot=False):
+def global_percentiles_normal_distribution(
+    arr: np.ndarray, plot: str = False
+) -> np.ndarray:
     """
-    Return the global percentiles of each value in the array based on a normal distribution.
+    Return the global percentiles of each value in the array based on a \
+        normal distribution.
 
     Args:
         arr (_type_): Input 2D array.
+        plot (_type_, optional): If True, a plot of the fitted normal \
 
     Returns:
-        _type_: Array with the same shape where each value is replaced by its global percentile.
+        _type_: Array with the same shape where each value is replaced by \
+            its global percentile.
     """
     # check that at least 11 entries in the array
     if len(arr) < 11:
@@ -1958,14 +2143,40 @@ def global_percentiles_normal_distribution(arr, plot=False):
     return percentiles
 
 
-def gmm_cdf(x, means, covariances, weights):
+def gmm_cdf(x: list, means: list, covariances: list, weights: list) -> list:
+    """Calculate the CDF of a Gaussian Mixture Model at a given value.
+
+    Args:
+        x (list): Data point at which to calculate the CDF.
+        means (list): List of means of the components of the GMM.
+        covariances (list): List of covariances of the components of the GMM.
+        weights (): List of weights of the components of the GMM.
+
+    Returns:
+        list: CDF of the GMM at the given value.
+    """
     cdf = 0.0
     for mu, cov, weight in zip(means, covariances, weights):
         cdf += weight * stats.norm.cdf(x, loc=mu, scale=np.sqrt(cov))
     return cdf
 
 
-def global_percentiles_gaussian_mixture(arr, plot=False):
+def global_percentiles_gaussian_mixture(arr: np.array, plot=False) -> np.array:
+    """Return the global percentiles of each value in the array based on a \
+        Gaussian Mixture Model.
+
+    Args:
+        arr (np.array): Input 2D array.
+        plot (bool, optional): If True, a plot of the fitted Gaussian Mixture \
+            Model will be returned. Defaults to False.
+
+    Raises:
+        ValueError: Array must have at least 11 entries.
+
+    Returns:
+        np.array: Array with the same shape where each value is replaced by \
+            its global percentile.
+    """
 
     # check that at least 11 entries in the array
     if len(arr) < 11:
@@ -2043,13 +2254,30 @@ def get_scatter_plot(
     colour: str,
     X_2d: np.array,
     method: str,
-):
+) -> go.Figure:
+    """Create a scatter plot of the embeddings after dimnesionality \
+        reduction. The points are coloured based on the values of a \
+        categorical column in the meta_data.
+
+    Args:
+        emb_object (dict): ema object.
+        emb_space_name (str): Name of the embedding space.
+        colour (str): Name of the column in the meta_data to use for \
+            colouring the points.
+        X_2d (np.array): 2D array of the embeddings after dimensionality \
+            reduction.
+        method (str): Name of the method used for dimensionality reduction.
+
+    Returns:
+        go.Figure: Scatter plot of the embeddings after dimensionality \
+            reduction.
+    """
     fig = px.scatter(
         x=X_2d[:, 0],
         y=X_2d[:, 1],
         color=[str(value) for value in emb_object.meta_data[colour]],
         labels={"color": "Cluster"},
-        title=f"{method} visualization of variant embeddings of {emb_space_name} embeddings",
+        title=f"{method} visualization of variant embeddings of {emb_space_name} embeddings",  # noqa
         hover_data={
             "Sample": emb_object.sample_names,
         },
@@ -2075,7 +2303,16 @@ def get_scatter_plot(
     return fig
 
 
-def update_fig_layout(fig):
+def update_fig_layout(fig) -> go.Figure:
+    """Update the layout of a plotly figure to adjust the font, line,\
+        and grid settings.
+
+    Args:
+        fig (_type_): Plotly figure object.
+
+    Returns:
+        go.Figurge : Plotly figure object with updated layout.
+    """
     fig.update_layout(
         template="plotly_white",
         font=dict(family="Arial", size=12, color="black"),
@@ -2089,15 +2326,18 @@ def update_fig_layout(fig):
     return fig
 
 
-def convert_to_1d_array(matrix):
+def convert_to_1d_array(matrix) -> np.ndarray:
     """
-    Convert a 2D symmetric distance matrix to a 1D array of distances.
+    Convert a 2D symmetric distance matrix to a 1D array of distances. \
+    The distances are extracted from the upper triangular part of the matrix \
+    (excluding the diagonal).
 
     Parameters:
     matrix (numpy.ndarray): 2D symmetric distance matrix.
 
     Returns:
-    numpy.ndarray: 1D array of distances.
+    numpy.ndarray: 1D array of distances of dimension \
+        n(n-1)/2, where n is the number of rows/columns in the matrix.
     """
     # Get the size of the matrix
     n = matrix.shape[0]
@@ -2112,3 +2352,42 @@ def convert_to_1d_array(matrix):
             distances.append(matrix[i, j])
 
     return np.array(distances)
+
+
+def get_unique_pairs(indices) -> list:
+    """Generate all unique pairs of indices from a list of indices. \
+        Does not include pairs where the indices are the same.
+
+    Args:
+        indices (_type_): List of indices.
+
+    Returns:
+        _type_: List of unique pairs of indices.
+    """
+    pairs = set()
+    for i in range(len(indices)):
+        for j in range(i + 1, len(indices)):
+            pairs.add((indices[i], indices[j]))
+    return list(pairs)
+
+
+def generate_cross_list_pairs(indices_1, indices_2) -> list:
+    """Generate all pairs of indices from two lists of indices. \
+        Does not include pairs where the indices are the same.
+
+    Args:
+        indices_1 (_type_): List of indices.
+        indices_2 (_type_): List of indices.
+
+    Returns:
+        _type_: List of pairs of indices.
+    """
+
+    pairs = set()
+    for i in range(len(indices_1)):
+        for j in range(len(indices_2)):
+            pair = tuple(sorted([indices_1[i], indices_2[j]]))
+            pairs.add(pair)
+    # remove pairs where the indices are the same
+    pairs = set([pair for pair in pairs if pair[0] != pair[1]])
+    return list(pairs)
