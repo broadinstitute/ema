@@ -34,18 +34,25 @@ class EmbeddingHandler:
         """Initialise EmbeddingHandler object.
 
         Parameters:
-        sample_meta_data (pd.DataFrame): Meta data for samples.
-            Should have sample names in the first column.
+        sample_meta_data (pd.DataFrame): Meta data for samples. \
+            Should have sample identifiers in the first column. \
+            Should have a header row.
 
         Object attributes:
         meta_data (pd.DataFrame): Meta data for samples.
         meta_data_first_column (str): Name of the first column in meta_data.
-        meta_data_numeric_columns (list): List of numerical columns in meta_data.
-        meta_data_categorical_columns (list): List of categorical columns in meta_data.
-        pw_meta_data (dict): Pairwise meta data.
-        sample_names (list): List of sample names.
-        colour_map (dict): Colour map for features in meta_data.
-        emb (dict): Embedding spaces.
+        meta_data_numeric_columns (list): List of column names of columns \
+            in meta_data with numerical data.
+        meta_data_categorical_columns (list): List of column names of columns \
+            in meta_data with categorical data.
+        sample_names (list): List of sample names as defined in the first \
+            column of the metadata. The order is determined by the order \
+            of the samples in the metadata.
+        colour_map (dict): Dictionary with colour codes for categorical \
+            features in meta_data.
+        emb (dict): Dictionary for embedding spaces which can be added later.
+        pw_meta_data (dict): Dictionary for pairwise meta data which can \
+            be added later.
         """
         self.meta_data = sample_meta_data
         self.meta_data_first_column = self.meta_data.columns[0]
@@ -55,10 +62,10 @@ class EmbeddingHandler:
             for col in self.meta_data.columns[1:]
             if col not in self.meta_data_numeric_columns
         ]
-        self.pw_meta_data = dict()
         self.sample_names = self.meta_data.iloc[:, 0].tolist()
         self.colour_map = self.__get_colour_map_for_features__()
         self.emb = dict()
+        self.pw_meta_data = dict()
         print(f"{len(self.sample_names)} samples loaded.")
         print(f"Categories in meta data: {self.meta_data_categorical_columns}")
         print(
@@ -70,7 +77,7 @@ class EmbeddingHandler:
         """Identify numerical columns in meta_data.
 
         Returns:
-        list: List of numerical columns in meta_data.
+        list: List of the column names of all numerical columns in meta_data.
         """
         # find columnns in meta data which are numerical
         numerical_columns = (
@@ -81,10 +88,15 @@ class EmbeddingHandler:
         return numerical_columns
 
     def __get_colour_map_for_features__(self) -> dict:
-        """Generate colour map for features in meta_data.
+        """Generate colour map for categorical features in the meta_data. \
+        The colour map is used for visualisation. \
+        The colour map is generated based on the number of unique values \
+        in the columns of the meta_data. \
+        Only defined for columns with less than 15 unique values.
 
         Returns:
-        dict: Colour map for features in meta_data.
+        dict: Dictionary with colour codes for categorical features in \
+            the meta_data.
         """
         if len(self.meta_data.columns) == 1:
             print("No meta data provided. Cannot generate colour map.")
@@ -115,9 +127,11 @@ class EmbeddingHandler:
                     raise IndexError(
                         f"The index i is out of range for {column_values}"
                     )
-                if str(value) == "True":
+                if (str(value) == "True") or (str(value) == "Disordered"):
                     colour_map[column][str(value)] = "steelblue"
-                elif str(value) == "False":
+                elif (str(value) == "False") or (
+                    str(value) == "Non-disordered"
+                ):
                     colour_map[column][str(value)] = "darkred"
                 else:
                     colour_map[column][value] = colours[i]
@@ -138,7 +152,7 @@ class EmbeddingHandler:
             return True
 
     def __check_col_in_meta_data__(self, col) -> None:
-        """Check if col is present in meta_data.
+        """Check if a column name is present in meta_data.
 
         Parameters:
         col (str): Column name.
@@ -150,7 +164,7 @@ class EmbeddingHandler:
             raise ValueError(f"Column {col} not found in meta data.")
 
     def __check_col_categorical__(self, col) -> None:
-        """Check if col is categorical in meta_data.
+        """Check if col is a categorical column in meta_data.
 
         Parameters:
         col (str): Column name.
@@ -178,10 +192,10 @@ class EmbeddingHandler:
         return True
 
     def __sample_indices_to_groups__(self, group: str) -> dict:
-        """Convert sample indices to groups based on a column in meta_data.
+        """Find sample indices for each group in a column of meta_data.
 
         Parameters:
-        group (str): Column name in meta_data.
+        group (str): Column name in meta_data to group by.
 
         Returns:
         dict: Dictionary with group names as keys and sample indices as values.
@@ -198,7 +212,7 @@ class EmbeddingHandler:
 
     def __calculate_clusters__(
         self, emb_space_name: str, n_clusters: int = None
-    ):
+    ) -> None:
         """Calculate clusters using KMeans clustering algorithm.
         If n_clusters is not provided, the number of clusters is calculated
         based on the number of unique values in the meta_data columns.
@@ -207,6 +221,17 @@ class EmbeddingHandler:
         If only one column is present, the number of clusters is set to 5.
         If the number of clusters is less than 2, it is set to 3.
         If the number of clusters is more than 15, it is set to 15.
+        The cluster labels are added to the meta_data in a new column.
+        The new column is named "cluster_" + emb_space_name.
+        
+        Parameters:
+        emb_space_name (str): Name of the embedding space.
+        n_clusters (int): Number of clusters. If not provided, the number of \
+            clusters is calculated based on the number of unique values in \
+                the meta_data columns.
+        
+        Raises:
+        ValueError: If emb_space_name is not present in emb.
         """
         self.__check_for_emb_space__(emb_space_name)
 
@@ -236,7 +261,25 @@ class EmbeddingHandler:
         print(f"{n_clusters} clusters calculated for {emb_space_name}.")
         return
 
-    def __calculate_pwd__(self, emb_space_name: str, metric: str):
+    def __calculate_pwd__(self, emb_space_name: str, metric: str) -> np.array:
+        """Calculate pairwise distance matrix for an embedding space.
+
+        Args:
+            emb_space_name (str): Name of the embedding space.
+            metric (str): Distance metric. Can be one of the following:
+                - "sqeuclidean_normalised"
+                - "euclidean_normalised"
+                - "cityblock_normalised"
+                - "adjusted_cosine"
+                - "euclidean"
+                - "cityblock"
+                - "cosine"
+                - "sqeuclidean"
+                - "mahalanobis"
+
+        Returns:
+            np.array: _description_
+        """
 
         if metric == "sqeuclidean_normalised":
             # divide each row by its norm
@@ -269,47 +312,20 @@ class EmbeddingHandler:
             emb_pwd = squareform(pdist(emb, metric="cosine"))
             return emb_pwd
 
-        elif metric == "knn":
-            k_neighbours = math.floor(len(self.sample_names) / 5)
-            if k_neighbours < 1:
-                k_neighbours = 3
-            elif k_neighbours > 100:
-                k_neighbours = 100
-            print(
-                f"Calculating {k_neighbours} nearest neighbours for each sample."
-            )
-            emb_pwd = self.__calculate_k_closest_neighbours__(
-                emb_space_name=emb_space_name, k=k_neighbours
-            )
-            return emb_pwd
-
         emb_pwd = squareform(
             pdist(self.emb[emb_space_name]["emb"], metric=metric)
         )
         return emb_pwd
 
-    def __calculate_k_closest_neighbours__(self, emb_space_name: str, k: int):
-        self.__check_for_emb_space__(emb_space_name)
-        emb_pwd = self.get_sample_distance(emb_space_name, "euclidean")
-        k_closest_neighbours = dict()
-        for i, sample in enumerate(self.sample_names):
-            k_closest_neighbours[sample] = [
-                self.sample_names[j]
-                for j in np.argsort(emb_pwd[i, :])[1 : k + 1]
-            ]
-        # mask the k_closest_neighbours in the distance matrix with 0 and 1
-        emb_pwd_masked = np.zeros(emb_pwd.shape)
-        emb_pwd_masked[emb_pwd < np.sort(emb_pwd, axis=1)[:, k][:, None]] = 1
-        return emb_pwd_masked
-
     def add_emb_space(self, embeddings: np.array, emb_space_name: str) -> None:
-        """Add embedding space to emb.
+        """Add embedding space to emb object.
 
         Parameters:
-        embeddings (np.array): Embedding space. Embeddings need to be
-        in the shape (n_samples, n_features). The order of samples should
-        match the order of samples in the meta_data.
-        emb_space_name (str): Name of the embedding space. Can be any string.
+        embeddings (np.array): Embedding space. Embeddings need to be \
+            in the shape (n_samples, n_features). The order of samples should \
+            match the order of samples in the meta_data.
+        emb_space_name (str): Name of the embedding space. Can be any string. \
+            Should be unique. If the name already exists, an error is raised.
         """
         if emb_space_name in self.emb.keys():
             raise ValueError(
@@ -324,8 +340,8 @@ class EmbeddingHandler:
         self.emb[emb_space_name] = dict()
         self.emb[emb_space_name]["emb"] = embeddings
         self.__calculate_clusters__(emb_space_name, n_clusters=None)
+        # add a default colour for the new embedding space
         if len(self.emb.keys()) > len(emb_space_colours):
-            # choose random color
             self.emb[emb_space_name]["colour"] = px.colors.qualitative.Set3[
                 len(self.emb.keys()) - len(emb_space_colours)
             ]
@@ -342,6 +358,7 @@ class EmbeddingHandler:
 
         Parameters:
         emb_space_name (str): Name of the embedding space to be removed.
+        Will raise an error if the embedding space does not exist.
         """
         self.__check_for_emb_space__(emb_space_name)
         del self.emb[emb_space_name]
@@ -353,8 +370,8 @@ class EmbeddingHandler:
         """Add pairwise metadata to emb.
 
         Parameters:
-        pw_metadata (pd.DataFrame): Pairwise metadata. The dataframe should
-        have the same number of rows and columns as the number of samples.
+        pw_metadata (pd.DataFrame): Pairwise metadata. The dataframe should \
+            have the same number of rows and columns as the number of samples.
         """
         if pw_metadata_name in self.pw_meta_data.keys():
             raise ValueError(
@@ -364,7 +381,7 @@ class EmbeddingHandler:
 
         if pw_metadata_name in self.meta_data.columns:
             raise ValueError(
-                f"Pairwise metadata name {pw_metadata_name} already exists in meta_data."
+                f"Pairwise metadata name {pw_metadata_name} already exists."
             )
 
         # check that all column names are the same as the sample names
@@ -389,7 +406,8 @@ class EmbeddingHandler:
         return
 
     def remove_pw_metadata(self, pw_metadata_name: str) -> None:
-        """Remove pairwise metadata from emb.
+        """Remove pairwise metadata from emb object. Will raise an error if \
+            the pairwise metadata does not exist.
 
         Parameters:
         pw_metadata_name (str): Name of the pairwise metadata to be removed.
@@ -404,13 +422,14 @@ class EmbeddingHandler:
 
     def recalculate_clusters(
         self, emb_space_name: str, n_clusters: int = None
-    ):
-        """Recalculate clusters for an embedding space.
+    ) -> None:
+        """Recalculate unsupervised clusters for an embedding space.
 
         Parameters:
         emb_space_name (str): Name of the embedding space.
-        n_clusters (int): Number of clusters. If not provided, the number of clusters
-        is calculated based on the number of unique values in the meta_data columns.
+        n_clusters (int): Number of clusters. If not provided, the number of \
+            clusters is calculated based on the number of unique values in \
+            the meta_data columns.
         """
         self.__check_for_emb_space__(emb_space_name)
         self.__calculate_clusters__(emb_space_name, n_clusters)
@@ -434,7 +453,7 @@ class EmbeddingHandler:
         group_value (str): Value in the column.
 
         Returns:
-            list: List of sample names.
+            list: List of sample names for the group value.
         """
         self.__check_col_categorical__(group)
         if group_value not in self.meta_data[group].unique():
@@ -472,7 +491,7 @@ class EmbeddingHandler:
         """
         return self.meta_data[self.meta_data_numeric_columns].columns.tolist()
 
-    def get_value_per_group(self, group: str) -> list:
+    def get_unique_values_per_group(self, group: str) -> list:
         """Return unique values in a column of meta_data.
 
         Args:
@@ -508,10 +527,12 @@ class EmbeddingHandler:
         Args:
             emb_space_name (str): Name of the embedding space.
             distance_metric (str): Name of the distance metric.
-            rank (str): Name of the rank method. Either "order", "normal_dis" or "poisson_dis".
+            rank (str): Name of the rank method. Either "order", "normal_dis" \
+                or "poisson_dis".
 
         Returns:
-            np.array: Array with the percentiles of the pairwise distance matrix.
+            np.array: Array with the percentiles of the pairwise \
+                distance matrix.
         """
         self.__check_for_emb_space__(emb_space_name)
         emb_pwd = self.get_sample_distance(emb_space_name, distance_metric)
@@ -526,7 +547,10 @@ class EmbeddingHandler:
     def get_sample_distance(
         self, emb_space_name: str, metric: str, rank: bool = False
     ) -> np.array:
-        """Calculate pairwise distance between samples in the embedding space.
+        """Calculate pairwise distance between samples in the embedding space.\
+            Columns and rows are ordered by the order of samples in the \
+            meta_data. Each element in the matrix is the distance between the \
+            corresponding samples in the embedding space.
 
         Parameters:
         emb_space_name (str): Name of the embedding space.
@@ -540,7 +564,6 @@ class EmbeddingHandler:
             - "sequclidean_normalised"
             - "adjusted_cosine"
             - "mahalanobis"
-            - "knn"
 
         Returns:
         np.array: Pairwise distance matrix.
@@ -565,7 +588,26 @@ class EmbeddingHandler:
         emb_space_name_2: str,
         distance_metric: str,
         rank: bool = False,
-    ):
+    ) -> np.array:
+        """Calculate the difference between two pairwise distance matrices. \
+        The difference is calculated as pwd_1 - pwd_2. \
+        If rank is True, the distance matrices are converted to percentiles \
+        before calculating the difference.
+
+        Args:
+            emb_space_name_1 (str): Name of the first embedding space.
+            emb_space_name_2 (str): Name of the second embedding space.
+            distance_metric (str): Name of the distance metric.
+            rank (bool, optional): Boolean to describe whether to convert \
+                the distance matrix to percentiles before calculating \
+                    the difference. Defaults to False.
+
+        Returns:
+            np.array: Pairwise distance matrix difference. \
+                Each element is the difference between the corresponding \
+                elements in the two distance matrices. \
+                If rank is True, the difference is in percentiles.
+        """
         for emb_space_name in [emb_space_name_1, emb_space_name_2]:
             self.__check_for_emb_space__(emb_space_name)
 
@@ -582,7 +624,25 @@ class EmbeddingHandler:
 
         return delta_emb_pwd
 
-    def visualise_emb_pca(self, emb_space_name: str, colour: str = None):
+    def visualise_emb_pca(
+        self, emb_space_name: str, colour: str = None
+    ) -> go.Figure:
+        """Visualise embedding space using PCA. The first two principal \
+        components are used for the plot. The variance explained by the \
+        first two components is displayed on the axes. The data points are \
+        coloured based on the categorical column in the meta_data. If no \
+        colour column is provided, the data points are coloured based on \
+        the unsupervised clusters calculated using KMeans.
+
+        Args:
+            emb_space_name (str): Name of the embedding space.
+            colour (str, optional): Categorical column in the meta_data to \
+                colour the data points. Default is None and will colour the \
+                data points based on their unsupervised clusters.
+
+        Returns:
+            go.Figure: PCA plot.
+        """
         self.__check_for_emb_space__(emb_space_name)
         if not colour:
             self.__calculate_clusters__(emb_space_name, n_clusters=None)
@@ -593,6 +653,9 @@ class EmbeddingHandler:
         pca = PCA(n_components=2)
         X_2d = pca.fit_transform(self.emb[emb_space_name]["emb"])
 
+        # get variance explained by the first two components
+        variance_explained = pca.explained_variance_ratio_
+
         fig = get_scatter_plot(
             emb_object=self,
             emb_space_name=emb_space_name,
@@ -600,13 +663,35 @@ class EmbeddingHandler:
             X_2d=X_2d,
             method="PCA",
         )
-        # fig.update_layout(
-        #     legend=dict(
-        #         title=f"{colour.capitalize()}",)
-        # )
+
+        # add variance explained to axes
+        fig.update_layout(
+            xaxis_title="PC1 ({}%)".format(
+                round(variance_explained[0] * 100, 2)
+            ),
+            yaxis_title="PC2 ({}%)".format(
+                round(variance_explained[1] * 100, 2)
+            ),
+        )
         return fig
 
-    def visualise_emb_umap(self, emb_space_name: str, colour: str = None):
+    def visualise_emb_umap(
+        self, emb_space_name: str, colour: str = None
+    ) -> go.Figure:
+        """Visualise embedding space using UMAP. The data points \
+            are coloured based on the categorical column in the meta_data. \
+            If no colour column is provided, the data points are coloured \
+            based on their unsupervised clusters.
+
+        Args:
+            emb_space_name (str): Name of the embedding space.
+            colour (str, optional): Categorical column in the meta_data to \
+                colour the data points. Default is None and will colour the \
+                data points based on their unsupervised clusters.
+
+        Returns:
+            go.Figure: UMAP plot.
+        """
         self.__check_for_emb_space__(emb_space_name)
         if not colour:
             self.__calculate_clusters__(emb_space_name, n_clusters=None)
@@ -627,7 +712,24 @@ class EmbeddingHandler:
 
     def visualise_emb_tsne(
         self, emb_space_name: str, colour: str = None, perplexity=10
-    ):
+    ) -> go.Figure:
+        """Visualise embedding space using t-SNE. The data points \
+            are coloured based on the categorical column in the meta_data. \
+            If no colour column is provided, the data points are coloured \
+            based on their unsupervised clusters. The perplexity parameter \
+            can be adjusted. The default is 10.
+
+        Args:
+            emb_space_name (str): _description_
+            colour (str, optional): Categorical column in the meta_data to \
+                colour the data points. Default is None and will colour the \
+                data points based on their unsupervised clusters.
+            perplexity (int, optional): Perplexity parameter for t-SNE.\
+                Defaults to 10.
+
+        Returns:
+            go.Figure: t-SNE plot.
+        """
         self.__check_for_emb_space__(emb_space_name)
         if not colour:
             self.__calculate_clusters__(emb_space_name, n_clusters=None)
@@ -649,17 +751,33 @@ class EmbeddingHandler:
     def plot_feature_cluster_overlap(
         self, emb_space_name: str, feature: str
     ) -> go.Figure:
+        """Bar plot showing the agreement between unsupervised clusters \
+            and a categorical feature in the meta_data. The x-axis shows \
+            the feature values and the y-axis shows the number of samples. \
+            The bars are coloured based on the unsupervised clusters. \
+            The plot is for a specific embedding space.
+
+        Args:
+            emb_space_name (str): Name of the embedding space.
+            feature (str): Categorical column in the meta_data. \
+                Can also refer to an unbiased cluster by specifying \
+                "cluster_" + emb_space_name.
+
+        Returns:
+            go.Figure: Bar plot.
+        """
         self.__check_col_categorical__(feature)
         self.__check_for_emb_space__(emb_space_name)
 
-        # plot a bar plot with features on x-axis and number of samples on y-axis
-        # coloured by the different clusters
+        # plot a bar plot with features on x-axis and number of samples on
+        # y-axis coloured by the different clusters
 
         fig = (
             px.bar(
                 self.meta_data,
                 x=feature,
                 color="cluster_" + emb_space_name,
+                # 
                 title=f"Agreement between unsupervised clusters and {feature} clusters for {emb_space_name} embeddings",
                 labels={
                     "cluster_" + emb_space_name: "Unsupervised cluster",
@@ -681,6 +799,13 @@ class EmbeddingHandler:
     def plot_emb_hist(
         self,
     ) -> go.Figure:
+        """Plot histogram of embedding values for all embedding spaces. \
+            The colour of the histogram bars corresponds to the embedding \
+            space.
+
+        Returns:
+            go.Figure: Histogram plot.
+        """
         # merge embedding data into one dataframe with emb_name as column
         df_emb = pd.DataFrame(columns=["emb_space", "emb_values"])
         for emb_space in self.emb.keys():
@@ -1069,13 +1194,19 @@ class EmbeddingHandler:
                             ][0]
                         )
 
-                        if (group_i, group_j) in pairs_of_groups:
-                            colour.append("{} - {}".format(group_i, group_j))
-                        elif (group_j, group_i) in pairs_of_groups:
-                            colour.append("{} - {}".format(group_j, group_i))
-
+                        if ((group_i, group_j) in pairs_of_groups) or (
+                            (group_j, group_i) in pairs_of_groups
+                        ):
+                            if group_i == colour_value_1:
+                                colour.append(
+                                    "{} - {}".format(group_i, group_j)
+                                )
+                            else:
+                                colour.append(
+                                    "{} - {}".format(group_j, group_i)
+                                )
                         else:
-                            colour.append("non_group")
+                            colour.append(f"Not {colour_value_1}")
                     colour_map = None
 
             else:
@@ -1092,19 +1223,21 @@ class EmbeddingHandler:
                         if (i in group_indices_1 and j in group_indices_2) or (
                             i in group_indices_2 and j in group_indices_1
                         ):
-                            colour.append("cross")
+                            colour.append(f"{colour_value_1}-{colour_value_2}")
                         elif i in group_indices_1 and j in group_indices_1:
-                            colour.append(f"{colour_value_1}")
+                            colour.append(f"{colour_value_1}-{colour_value_1}")
                         elif i in group_indices_2 and j in group_indices_2:
-                            colour.append(f"{colour_value_2}")
+                            colour.append(f"{colour_value_2}-{colour_value_2}")
                         else:
-                            colour.append("non_group")
+                            colour.append(
+                                f"Not {colour_value_1} or {colour_value_2}"
+                            )
 
                     colour_map = {
-                        "cross": "steelblue",
-                        f"{colour_value_1}": "darkred",
-                        f"{colour_value_2}": "navy",
-                        "non_group": "lightgray",
+                        f"{colour_value_1}-{colour_value_2}": "steelblue",
+                        f"{colour_value_1}-{colour_value_1}": "darkred",
+                        f"{colour_value_2}-{colour_value_2}": "navy",
+                        f"Not {colour_value_1} or {colour_value_2}": "lightgray",
                     }
 
         else:
@@ -1158,8 +1291,26 @@ class EmbeddingHandler:
             range=[0, max(emb_pwd_1.max() * 1.1, emb_pwd_2.max() * 1.1)],
             title=f"{emb_space_name_2} {distance_metric_aliases[distance_metric]} distance",
         )
-        fig.update_layout(width=800, height=800)
         fig = update_fig_layout(fig)
+        # update text size of axes and legend
+        fig.update_layout(
+            font=dict(family="Arial", size=24, color="black"),
+            legend=dict(
+                font=dict(family="Arial", size=24, color="black"),
+            ),
+        )
+        # move legend to the top horizontally
+        fig.update_layout(
+            legend=dict(
+                title=None,
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1,
+            )
+        )
+        fig.update_layout(width=800, height=800)
 
         return fig
 
@@ -1377,21 +1528,21 @@ class EmbeddingHandler:
             group_1_indices = sample_ids_per_group[group_1]
             group_2_indices = sample_ids_per_group[group_2]
 
-            group_pw_distances[f"{group_1} vs {group_2}"] = dict()
+            group_pw_distances[f"{group_1} - {group_2}"] = dict()
             # find all values for each pair of indices
             matrix_idx = generate_cross_list_pairs(
                 group_1_indices, group_2_indices
             )
 
-            group_pw_distances[f"{group_1} vs {group_2}"]["pw_distances"] = [
+            group_pw_distances[f"{group_1} - {group_2}"]["pw_distances"] = [
                 pw_distances[idx[0], idx[1]] for idx in matrix_idx
             ]
             if group_1 == group_2:
-                group_pw_distances[f"{group_1} vs {group_2}"][
+                group_pw_distances[f"{group_1} - {group_2}"][
                     "pair_type"
                 ] = "within_group"
             else:
-                group_pw_distances[f"{group_1} vs {group_2}"][
+                group_pw_distances[f"{group_1} - {group_2}"][
                     "pair_type"
                 ] = "outside_group"
 
@@ -1472,6 +1623,15 @@ class EmbeddingHandler:
                 title_text=f"Log of {distance_metric_aliases[distance_metric]} distances",
             )
         fig = update_fig_layout(fig)
+        # make font of axes and legend bigger
+        fig.update_layout(
+            font=dict(family="Arial", size=22, color="black"),
+            legend=dict(
+                font=dict(family="Arial", size=22, color="black"),
+            ),
+        )
+        # change x-axes text to be vertical
+        fig.update_layout(xaxis_tickangle=-90)
         return fig
 
     def plot_emb_dis_his_with_fitted_functions(
@@ -1595,6 +1755,97 @@ class EmbeddingHandler:
             fig = update_fig_layout(fig)
 
             return fig
+
+    def get_distances_per_group(
+        self,
+        emb_space_name: str,
+        distance_metric: str,
+        group: str,
+        group_value: str = None,
+        rank: str = None,
+    ):
+        self.__check_for_emb_space__(emb_space_name)
+        self.__check_col_categorical__(group)
+
+        # get pairs of indices for each group
+        pw_distances = self.get_sample_distance(
+            emb_space_name, distance_metric, rank
+        )
+
+        # stratify the pairs of indices by group
+        sample_ids_per_group = self.__sample_indices_to_groups__(group=group)
+
+        group_combinations = list(
+            itertools.combinations_with_replacement(
+                sample_ids_per_group.keys(), 2
+            )
+        )
+
+        if group_value is not None:
+            if group_value not in sample_ids_per_group.keys():
+                raise ValueError(f"{group_value} not found in {group}")
+
+            group_combinations = [
+                (group_1, group_2)
+                for group_1, group_2 in group_combinations
+                if (group_1 == group_value) or (group_2 == group_value)
+            ]
+
+        # filter group
+
+        # for each group combination, get the pairwise distances
+        group_pw_distances = {}
+
+        for group_1, group_2 in group_combinations:
+            group_1_indices = sample_ids_per_group[group_1]
+            group_2_indices = sample_ids_per_group[group_2]
+
+            group_pw_distances[f"{group_1} - {group_2}"] = dict()
+            # find all values for each pair of indices
+            matrix_idx = generate_cross_list_pairs(
+                group_1_indices, group_2_indices
+            )
+
+            group_pw_distances[f"{group_1} - {group_2}"]["pw_distances"] = [
+                pw_distances[idx[0], idx[1]] for idx in matrix_idx
+            ]
+            if group_1 == group_2:
+                group_pw_distances[f"{group_1} - {group_2}"][
+                    "pair_type"
+                ] = "within_group"
+            else:
+                group_pw_distances[f"{group_1} - {group_2}"][
+                    "pair_type"
+                ] = "outside_group"
+
+        # create a dataframe for plotting
+        df = pd.DataFrame(columns=["group", "distance", "pair_type"])
+
+        for group_combination, group_data in group_pw_distances.items():
+            df = pd.concat(
+                [
+                    df,
+                    pd.DataFrame(
+                        {
+                            "group": [group_combination]
+                            * len(group_data["pw_distances"]),
+                            "distance": group_data["pw_distances"],
+                            "pair_type": [group_data["pair_type"]]
+                            * len(group_data["pw_distances"]),
+                        }
+                    ),
+                ]
+            )
+
+        distances_per_group = {}
+        # find all values for each group
+        for group in df["group"].unique():
+            # find all distances
+            distances_per_group[group] = list(
+                df[df["group"] == group]["distance"]
+            )
+
+        return distances_per_group
 
 
 def generate_unique_pairs(indices):
@@ -1811,6 +2062,9 @@ def get_scatter_plot(
         width=800,
         height=800,
         autosize=False,
+        legend=dict(
+            title=f"{colour.capitalize()}",
+        ),
     )
 
     # make dots proportional to number of samples
