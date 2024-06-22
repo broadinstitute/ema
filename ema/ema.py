@@ -1762,13 +1762,6 @@ class EmbeddingHandler:
                 title_text=f"Log of {distance_metric_aliases[distance_metric]} distances",  # noqa
             )
         fig = update_fig_layout(fig)
-        # make font of axes and legend bigger
-        fig.update_layout(
-            font=dict(family="Arial", size=22, color="black"),
-            legend=dict(
-                font=dict(family="Arial", size=22, color="black"),
-            ),
-        )
         # change x-axes text to be vertical
         fig.update_layout(xaxis_tickangle=-90)
         return fig
