@@ -249,7 +249,7 @@ class EmbeddingHandler:
                     n_clusters = 15
             else:
                 n_clusters = 5
-        km = KMeans(n_clusters=n_clusters, random_state=8)
+        km = KMeans(n_clusters=n_clusters, n_init="auto", random_state=8)
         km.fit(self.emb[emb_space_name]["emb"])
         km.predict(self.emb[emb_space_name]["emb"])
 
@@ -646,8 +646,9 @@ class EmbeddingHandler:
         """
         self.__check_for_emb_space__(emb_space_name)
         if not colour:
-            self.__calculate_clusters__(emb_space_name, n_clusters=None)
             colour = "cluster_" + emb_space_name
+            # self.__calculate_clusters__(emb_space_name, n_clusters=None)
+            # colour = "cluster_" + emb_space_name
 
         self.__check_col_categorical__(colour)
 
@@ -695,8 +696,9 @@ class EmbeddingHandler:
         """
         self.__check_for_emb_space__(emb_space_name)
         if not colour:
-            self.__calculate_clusters__(emb_space_name, n_clusters=None)
             colour = "cluster_" + emb_space_name
+            # self.__calculate_clusters__(emb_space_name, n_clusters=None)
+            # colour = "cluster_" + emb_space_name
         self.__check_col_categorical__(colour)
 
         umap_data = umap.UMAP(n_components=2, random_state=8)
@@ -733,8 +735,9 @@ class EmbeddingHandler:
         """
         self.__check_for_emb_space__(emb_space_name)
         if not colour:
-            self.__calculate_clusters__(emb_space_name, n_clusters=None)
             colour = "cluster_" + emb_space_name
+            # self.__calculate_clusters__(emb_space_name, n_clusters=None)
+            # colour = "cluster_" + emb_space_name
         self.__check_col_categorical__(colour)
 
         tsne = TSNE(n_components=2, random_state=8, perplexity=perplexity)
@@ -1376,24 +1379,6 @@ class EmbeddingHandler:
             title=f"{emb_space_name_2} {distance_metric_aliases[distance_metric]} distance",  # noqa
         )
         fig = update_fig_layout(fig)
-        # update text size of axes and legend
-        fig.update_layout(
-            font=dict(family="Arial", size=24, color="black"),
-            legend=dict(
-                font=dict(family="Arial", size=24, color="black"),
-            ),
-        )
-        # move legend to the top horizontally
-        fig.update_layout(
-            legend=dict(
-                title=None,
-                orientation="h",
-                yanchor="bottom",
-                y=1.02,
-                xanchor="right",
-                x=1,
-            )
-        )
         fig.update_layout(width=800, height=800)
 
         return fig
