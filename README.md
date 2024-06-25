@@ -42,11 +42,41 @@ pip3 install .                 # install dependencies
 jupyter lab colab_notebooks    # open notebook examples in jupyter for local exploration
 ```
 
+### Getting Started
+
+To get started with the ema-tool, load the metadata and embeddings, and initialize the EmbeddingHandler object. The following code snippet demonstrates how to use the ema-tool to compare two embedding spaces:
+
+```python
+
+# import ema object
+from ema.ema import EmbeddingHandler
+
+# load metadata and embeddings
+metadata = pd.read_csv(FP_METADATA)
+emb_esm1b = np.load(FP_EMB_ESM1b)
+emb_esm2 = np.load(FP_EMB_ESM2)
+
+# initialize embedding handler
+emb_handler = EmbeddingHandler(metadata)
+
+# add embeddings to the handler
+emb_handler.add_emb_space(embeddings=emb_esm1b, emb_space_name='esm1b')
+emb_handler.add_emb_space(embeddings=emb_esm2, emb_space_name='esm2')
+
+# start analysis
+emb_hander.plot_emb_hist()
+
+```
+
+
 ## Colab Notebook Example
 
-An example of how to use the ema-tool library is provided in the following colab notebook: 
+Two examples of how to use the ema-tool library is provided in the following colab notebooks: 
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/pia-francesca/ema/blob/main/colab_notebooks/ema_tool_application_example.ipynb)
+| Description | Link |
+|---------|-------------|
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/pia-francesca/ema/blob/main/colab_notebooks/application_example_ion_channel_proteins.ipynb) | Example of how to use the ema-tool to compare protein embeddings across three ESM models
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/pia-francesca/ema/blob/main/colab_notebooks/application_example_HCN1_variants.ipynb) | Example of how to use the ema-tool to compare embeddings of missense mutations across two ESM models
 
 
 ## Links to Embedding Scripts
