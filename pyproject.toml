@@ -7,7 +7,7 @@ packages = ["ema-emb"]
 
 [project]
 name = "ema-emb"
-version = "0.0.2"
+version = "0.0.4"
 authors = [
   { name="Francesca Rissom", email="francesca.rissom@hpi.de" },
   { name="Paulo Yanez Sarmiento", email="paul.yanze@hpi.de" },
